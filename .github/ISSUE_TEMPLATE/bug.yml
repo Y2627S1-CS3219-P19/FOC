@@ -1,0 +1,101 @@
+name: Bug
+description: Something is broken.
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        An agent may implement this unattended, days from now, against a codebase
+        that has moved on. Two habits make that work:
+
+        - **Describe behaviour, not code.** Name types, functions, commands and
+          user-visible effects. File paths and line numbers go stale.
+        - **Say how you would check it.** The fix is only done when someone can
+          prove it. "Acceptance criteria" below is the field that decides whether
+          this gets picked up or sent back.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One line. What is broken?
+      placeholder: Reset-zones dialog says the reset cannot be undone, but it can
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behaviour
+      description: What happens today, and who it affects.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: |
+        Numbered steps, starting from a known state. Include the app or command
+        you started from, anything that has to be set up first (a key, a seeded
+        project, a specific screen), and how often it happens.
+      placeholder: |
+        1. `docker compose up <service-name>`, open localhost:<port>
+        2. Perform action X
+        3. Observe error Y
+        4. Read the error log or response
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired behaviour
+      description: What should happen instead. Cover edge cases and error states if they matter.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: |
+        How anyone can prove this is fixed. One checkbox per independently
+        verifiable claim. If a number can be measured, give the number.
+      value: |
+        - [ ] 
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: |
+        Optional, and worth a lot. Error text, logs, a screenshot, or a
+        measurement with a baseline. A metric that already moves with the bug
+        gives the agent something to verify against rather than guess at.
+      placeholder: |
+        `THREE.WebGLShadowMap: PCFSoftShadowMap has been deprecated` fires on
+        every renderer reconfiguration, so its rate stands in for "the canvas
+        re-rendered": ~11/sec on turn 1, ~15 on turn 2, ~30 on turn 3.
+
+  - type: textarea
+    id: ruled-out
+    attributes:
+      label: Already ruled out
+      description: |
+        Optional, and the highest-value field on this form. Anything you tested
+        and eliminated, with how you tested it. This is the difference between
+        an agent starting where you left off and an agent repeating a day of
+        your work.
+      placeholder: |
+        - Removing the canvas AI composer entirely: no change (~32/sec). Not the cause.
+        - Reverting ZoneEditorProvider to its pre-PR shape: no change (~29/sec). Not the cause.
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Optional. Anything nearby that should be left alone.
