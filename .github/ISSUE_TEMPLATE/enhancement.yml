@@ -1,0 +1,98 @@
+name: Enhancement
+description: A new feature, or an improvement to one that exists.
+labels: [enhancement, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        An agent may implement this unattended, days from now, against a codebase
+        that has moved on. Two habits make that work:
+
+        - **Describe behaviour, not code.** Name types, functions, commands and
+          user-visible effects. File paths and line numbers go stale, and an
+          agent told to edit line 42 will edit the wrong line 42.
+        - **Bound it.** An agent with a vague brief builds more than you asked
+          for. "Acceptance criteria" and "Out of scope" are the two fields that
+          stop that.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: One line. What should exist that does not exist now?
+      placeholder: Material intensity plugin should provide a `derived` variable
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: |
+        What is hard or impossible today, and for whom. Write the need, not the
+        solution — the solution is the next field, and separating them lets a
+        reviewer disagree with one without discarding the other.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behaviour
+      description: The status quo this builds on. What exists today that is closest to it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired behaviour
+      description: |
+        What should happen once this is done, from the outside. Be specific
+        about edge cases, empty states, and what happens when it fails.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: |
+        How anyone can prove this is done. One checkbox per independently
+        verifiable claim. "It should work well" is not one; "running X produces
+        Y" is.
+      value: |
+        - [ ] 
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: |
+        What must NOT change, and adjacent things that look related but are
+        separate. Without this an agent will gold-plate.
+      placeholder: |
+        - Does not change the existing panel layout
+        - Does not touch frontend-v2; playground only until promoted
+    validations:
+      required: true
+
+  - type: textarea
+    id: interfaces
+    attributes:
+      label: Key interfaces
+      description: |
+        Optional. Named types, function signatures, config shapes or commands
+        the agent should look for or add. Names, not paths.
+      placeholder: |
+        - `MaterialIntensityDerived` — new derived variable, five categories, kg/m2
+        - Registered through the existing `derived` registration on the plugin
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Optional. Prior discussion, designs, links, or why now.
