@@ -1,0 +1,25 @@
+{
+  "name": "foc",
+  "private": true,
+  "type": "module",
+  "description": "Friend on Campus (FoC) - CS3219 Group 19 monorepo",
+  "workspaces": [
+    "packages/*",
+    "user-service",
+    "supplier-service",
+    "frontend"
+  ],
+  "scripts": {
+    "build:packages": "npm run build -w @foc/shared-middleware -w @foc/shared-events",
+    "build": "npm run build:packages && npm run build -w user-service -w supplier-service",
+    "typecheck": "npm run build:packages && npm run typecheck -w user-service -w supplier-service -w frontend",
+    "test": "npm run build:packages && npm run test -w user-service -w supplier-service"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,193 @@
+# Friend on Campus - local stack.  Start everything with:   docker compose up -d --build
+# Web app: http://localhost:5173   Keycloak: http://localhost:8080   Mailpit (fake inbox): http://localhost:8025
+# RabbitMQ UI: http://localhost:15672   User API docs: http://localhost:3001/v1/docs   Supplier API docs: http://localhost:3002/v1/docs
+name: foc
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 5s
+  timeout: 5s
+  retries: 30
+  start_period: 10s
+
+services:
+  # ---------- Identity provider ----------
+  keycloak-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.4
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      # One fixed public URL -> every token carries iss=http://localhost:8080/realms/campuserrand,
+      # while containers can still call Keycloak at http://keycloak:8080 (backchannel).
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_CACHE: local
+      # Keycloak's own master-realm console admin (NOT the FoC app admin).
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      # Substituted into infra/keycloak/campuserrand-realm.json on import.
+      KC_USER_SERVICE_CLIENT_SECRET: ${KC_USER_SERVICE_CLIENT_SECRET}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      start_period: 60s
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+
+  # ---------- Shared infrastructure ----------
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+
+  # ---------- User Service ----------
+  users-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: users_db
+      POSTGRES_USER: users
+      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - users-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U users -d users_db"]
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    environment:
+      PORT: 3001
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://users:${USERS_DB_PASSWORD}@users-db:5432/users_db
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:8080
+      KEYCLOAK_REALM: campuserrand
+      KC_USER_SERVICE_CLIENT_ID: user-service
+      KC_USER_SERVICE_CLIENT_SECRET: ${KC_USER_SERVICE_CLIENT_SECRET}
+      SPA_URL: http://localhost:5173
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-u.nus.edu}
+      ADMIN_CONTACT_EMAIL: ${ADMIN_CONTACT_EMAIL}
+      REGISTER_RATE_LIMIT_PER_HOUR: ${REGISTER_RATE_LIMIT_PER_HOUR:-5}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_TEMP_PASSWORD: ${BOOTSTRAP_ADMIN_TEMP_PASSWORD:-}
+      AMQP_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      DEBUG_EVENT_QUEUE: ${DEBUG_EVENT_QUEUE:-true}
+      TRUST_PROXY: "1"
+    ports:
+      - "3001:3001"
+    depends_on:
+      users-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health/ready"]
+
+  # ---------- Supplier Service ----------
+  suppliers-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: suppliers_db
+      POSTGRES_USER: suppliers
+      POSTGRES_PASSWORD: ${SUPPLIERS_DB_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - suppliers-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U suppliers -d suppliers_db"]
+
+  supplier-service:
+    build:
+      context: .
+      dockerfile: supplier-service/Dockerfile
+    environment:
+      PORT: 3002
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://suppliers:${SUPPLIERS_DB_PASSWORD}@suppliers-db:5432/suppliers_db
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:8080
+      KEYCLOAK_REALM: campuserrand
+      USER_SERVICE_URL: http://user-service:3001
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET}
+      SEED_CSV_PATH: /app/data/csv/supplier-seed-data.csv
+      IMAGES_DIR: /app/data/images
+    ports:
+      - "3002:3002"
+    depends_on:
+      suppliers-db:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/health/ready"]
+
+  # ---------- Web app (also acts as the local API gateway) ----------
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      user-service:
+        condition: service_healthy
+      supplier-service:
+        condition: service_healthy
+
+volumes:
+  keycloak-db-data:
+  users-db-data:
+  suppliers-db-data:
+  rabbitmq-data:
