@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     Supplier catalog and lifecycle management service for Friend on Campus (FoC).
-    Provides catalog search, filtering, and real-time open status for students,
+    Provides catalog search, multi-attribute filtering, and real-time open status for students,
     as well as administrative endpoints for supplier management.
 servers:
   - url: /v1
@@ -16,46 +16,57 @@ paths:
       summary: List suppliers
       description: |
         Retrieves a paginated list of suppliers with optional multi-attribute
-        filtering, keyword search, and sorting (F7.1, F7.2, F7.3).
+        filtering, keyword search, and sorting (F7).
+        Requires a live, non-suspended Keycloak session.
+        Regular users receive active suppliers only; admins can query deactivated stalls via status parameter.
       operationId: listSuppliers
+      security:
+        - BearerAuth: []
       parameters:
-        - name: query
+        - name: search
           in: query
-          description: Case-insensitive substring search matching supplier name (F7.2.2).
+          description: Substring match against name, building, or location description (<= 100 chars).
           required: false
           schema:
             type: string
+            maxLength: 100
             example: Cool
-        - name: facility_type
+        - name: facilityType
           in: query
-          description: Filter by exact facility type category (F7.2.1).
+          description: One or more comma-separated facility types (e.g. Food,Food/Coffee).
           required: false
           schema:
             type: string
-            example: Food
+            example: Food,Food/Coffee
         - name: building
           in: query
-          description: Filter by campus building (F7.2.1).
+          description: Exact campus building name, case-insensitive.
           required: false
           schema:
             type: string
             example: Com 2
-        - name: open_only
+        - name: status
           in: query
-          description: If true, excludes closed and deactivated suppliers (F7.2.3).
-          required: false
-          schema:
-            type: boolean
-            default: false
-        - name: sort_by
-          in: query
-          description: Sort field (F7.3.1, F7.3.2).
+          description: |
+            Filter by operating status.
+            - `active` (default): active suppliers
+            - `open_now`: suppliers currently open based on clock time
+            - `inactive`: deactivated suppliers (Admin only)
+            - `all`: all suppliers including deactivated (Admin only)
           required: false
           schema:
             type: string
-            enum: [name, building, facility_type]
+            enum: [active, open_now, inactive, all]
+            default: active
+        - name: sort
+          in: query
+          description: Sort field.
+          required: false
+          schema:
+            type: string
+            enum: [name, location, facilityType]
             default: name
-        - name: sort_order
+        - name: order
           in: query
           description: Sort direction.
           required: false
@@ -63,42 +74,49 @@ paths:
             type: string
             enum: [asc, desc]
             default: asc
-        - name: limit
+        - name: page
           in: query
-          description: Number of records to return per page.
+          description: Page number (starts at 1).
           required: false
           schema:
             type: integer
             minimum: 1
-            maximum: 100
-            default: 20
-        - name: offset
+            default: 1
+        - name: limit
           in: query
-          description: Record offset for pagination.
+          description: Number of records per page (max 50).
           required: false
           schema:
             type: integer
-            minimum: 0
-            default: 0
+            minimum: 1
+            maximum: 50
+            default: 20
       responses:
         '200':
-          description: Successfully retrieved supplier catalog.
+          description: Successfully retrieved supplier catalog page.
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+              description: Request correlation tracing identifier.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedSupplierResponse'
-        '400':
-          description: Invalid query parameters.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
 
     post:
       summary: Create supplier
       description: |
-        Registers a new supplier in the catalog (F8.1). Requires Admin role.
-        Enforces supplier name uniqueness (F8.1.1).
+        Registers a new supplier in the catalog (F8). Requires Admin role.
+        Enforces supplier name uniqueness ignoring case.
       operationId: createSupplier
       security:
         - BearerAuth: []
@@ -111,120 +129,188 @@ paths:
       responses:
         '201':
           description: Supplier successfully created.
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Supplier'
-        '400':
-          description: Missing or invalid request parameters.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/SingleSupplierResponse'
         '401':
-          description: Unauthenticated request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden (Caller lacks admin role).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenError'
         '409':
-          description: Supplier name already exists (F8.1.1).
+          description: Supplier name already taken.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
               example:
-                error: NAME_EXISTS
-                message: Supplier with this name already exists
+                error:
+                  code: SUPPLIER_NAME_TAKEN
+                  message: A supplier with this name already exists
+                  details: {}
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
 
     delete:
-      summary: Mass delete suppliers
+      summary: Bulk delete suppliers by facility type
       description: |
-        Deletes suppliers matching a category/facility type (F10.1.2). Requires Admin role.
-      operationId: massDeleteSuppliers
+        Deletes all suppliers belonging to a specific facility type (F10.1.2). Requires Admin role.
+        Requires `confirm=true` query parameter to execute.
+      operationId: bulkDeleteSuppliers
       security:
         - BearerAuth: []
       parameters:
-        - name: facility_type
+        - name: facilityType
           in: query
-          description: Target category of suppliers to mass delete.
+          description: Target facility type category to delete.
           required: true
           schema:
             type: string
-            example: Printing
+            example: Laundry
+        - name: confirm
+          in: query
+          description: Must be set to true to execute bulk deletion.
+          required: true
+          schema:
+            type: boolean
+            example: true
       responses:
         '200':
-          description: Mass deletion summary.
+          description: Bulk deletion executed successfully.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MassDeleteResponse'
-        '400':
-          description: Missing required query parameter.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - deleted
+                      - facilityType
+                    properties:
+                      deleted:
+                        type: integer
+                        example: 2
+                      facilityType:
+                        type: string
+                        example: Laundry
         '401':
-          description: Unauthenticated request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden (Caller lacks admin role).
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
+
+  /suppliers/filter-options:
+    get:
+      summary: Get available filter options
+      description: |
+        Returns distinct facility types and buildings currently available in the catalog.
+        Admins also see values from deactivated suppliers.
+      operationId: getFilterOptions
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Distinct filter options list.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - facilityTypes
+                      - buildings
+                    properties:
+                      facilityTypes:
+                        type: array
+                        items:
+                          type: string
+                        example: ["Food", "Food/Coffee", "Printing", "Shopping"]
+                      buildings:
+                        type: array
+                        items:
+                          type: string
+                        example: ["Central Library", "Com 2", "Prince George's Park"]
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
 
   /suppliers/{id}:
-    parameters:
-      - name: id
-        in: path
-        description: Unique identifier of the supplier.
-        required: true
-        schema:
-          type: string
-          format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-
     get:
       summary: Get supplier by ID
-      description: Retrieves complete details for a single supplier (F7.1).
+      description: |
+        Retrieves full supplier details by UUID (F7.1).
+        Deactivated suppliers return 404 for regular users, but are accessible to admins.
       operationId: getSupplierById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Supplier UUID.
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: Supplier details.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Supplier'
+                $ref: '#/components/schemas/SingleSupplierResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
         '404':
           description: Supplier not found.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
               example:
-                error: NOT_FOUND
-                message: Supplier not found
+                error:
+                  code: SUPPLIER_NOT_FOUND
+                  message: Supplier not found
+                  details: {}
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
 
     patch:
       summary: Update supplier
       description: |
         Partially updates supplier details (F9.3). Requires Admin role.
-        Enforces name uniqueness if name is modified (F9.3.2).
-        Providing operating_hours replaces the entire schedule for the supplier.
+        At least one field must be supplied. Rejects unallowed fields with 422.
       operationId: updateSupplier
       security:
         - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Supplier UUID.
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -237,167 +323,157 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Supplier'
-        '400':
-          description: Validation error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/SingleSupplierResponse'
         '401':
-          description: Unauthenticated request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden (Caller lacks admin role).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenError'
         '404':
-          description: Supplier not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFoundError'
         '409':
-          description: New supplier name already in use by another supplier (F9.3.2).
+          description: Supplier name already taken by another stall.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
               example:
-                error: NAME_EXISTS
-                message: Updated name clashes with another supplier
+                error:
+                  code: SUPPLIER_NAME_TAKEN
+                  message: A supplier with this name already exists
+                  details: {}
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
 
     delete:
       summary: Delete supplier
       description: |
-        Hard deletes a supplier record (F10.1.1). Requires Admin role.
-        Guarded against suppliers that possess historical order records.
+        Permanently deletes a supplier record (F10.1.1). Requires Admin role.
       operationId: deleteSupplier
       security:
         - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Supplier UUID.
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '204':
           description: Supplier deleted successfully.
         '401':
-          description: Unauthenticated request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden (Caller lacks admin role).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenError'
         '404':
-          description: Supplier not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: Supplier is linked to existing order history and cannot be deleted (Deactivate instead).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                error: SUPPLIER_HAS_ORDER_HISTORY
-                message: Cannot delete supplier with historical orders. Deactivate instead.
+          $ref: '#/components/responses/NotFoundError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
 
   /suppliers/{id}/deactivate:
-    parameters:
-      - name: id
-        in: path
-        description: Unique identifier of the supplier.
-        required: true
-        schema:
-          type: string
-          format: uuid
-    post:
+    patch:
       summary: Deactivate supplier
       description: |
-        Deactivates an active supplier (F9.1). Preserves historical order associations.
-        Deactivated suppliers are prevented from partaking in new orders (F9.1.2).
+        Soft-deactivates an active supplier (F9.1).
+        Preserves stall record and historical associations while hiding it from standard student catalog views.
         Requires Admin role.
       operationId: deactivateSupplier
       security:
         - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Supplier UUID.
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: Supplier deactivated successfully.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SupplierStatusResponse'
+                $ref: '#/components/schemas/SingleSupplierResponse'
         '401':
-          description: Unauthenticated request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden (Caller lacks admin role).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenError'
         '404':
-          description: Supplier not found.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/NotFoundError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
 
   /suppliers/{id}/reactivate:
-    parameters:
-      - name: id
-        in: path
-        description: Unique identifier of the supplier.
-        required: true
-        schema:
-          type: string
-          format: uuid
-    post:
+    patch:
       summary: Reactivate supplier
       description: |
         Reactivates a previously deactivated supplier (F9.2).
-        Reactivated suppliers behave the same as regular active suppliers (F9.2.1).
-        Requires Admin role.
+        Makes the stall publicly visible and active again. Requires Admin role.
       operationId: reactivateSupplier
       security:
         - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Supplier UUID.
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: Supplier reactivated successfully.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SupplierStatusResponse'
+                $ref: '#/components/schemas/SingleSupplierResponse'
         '401':
-          description: Unauthenticated request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UnauthorizedError'
         '403':
-          description: Forbidden (Caller lacks admin role).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/ForbiddenError'
         '404':
-          description: Supplier not found.
+          $ref: '#/components/responses/NotFoundError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
+
+  /supplier-images/{file}:
+    get:
+      summary: Get supplier image
+      description: |
+        Public endpoint serving static store photos from `data/images/`.
+        No authentication header required so `<img>` tags render natively in browsers.
+      operationId: getSupplierImage
+      parameters:
+        - name: file
+          in: path
+          description: Image filename (e.g. `COOL_SPOT.jpeg`).
+          required: true
+          schema:
+            type: string
+            example: COOL_SPOT.jpeg
+      responses:
+        '200':
+          description: Image JPEG binary stream.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Image not found.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: IMAGE_NOT_FOUND
+                  message: The requested image does not exist
+                  details: {}
 
 components:
   securitySchemes:
@@ -405,87 +481,25 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Pass JWT token issued by User Service containing `role` claim.
+      description: |
+        Keycloak Bearer access token issued for `campuserrand-spa` (web app) or `campuserrand-test` (dev/testing).
+        Verified locally against Keycloak's public keys (JWKS).
+        Admin endpoints require `"admin"` in `realm_access.roles`.
 
   schemas:
-    DayOfWeek:
-      type: string
-      enum:
-        - MONDAY
-        - TUESDAY
-        - WEDNESDAY
-        - THURSDAY
-        - FRIDAY
-        - SATURDAY
-        - SUNDAY
-      example: MONDAY
-
-    Location:
-      type: object
-      required:
-        - building
-        - floor
-      properties:
-        building:
-          type: string
-          description: Campus building name.
-          example: Com 2
-        floor:
-          type: string
-          description: Floor level within building.
-          example: "1"
-        description:
-          type: string
-          nullable: true
-          description: Helpful directions or landmark notes.
-          example: Opp LT16
-        latitude:
-          type: number
-          format: float
-          nullable: true
-          description: GPS latitude coordinate.
-          example: 1.2940156
-        longitude:
-          type: number
-          format: float
-          nullable: true
-          description: GPS longitude coordinate.
-          example: 103.7738478
-
-    OperatingHour:
-      type: object
-      required:
-        - day_of_week
-        - open_time
-        - close_time
-      properties:
-        day_of_week:
-          $ref: '#/components/schemas/DayOfWeek'
-        open_time:
-          type: string
-          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
-          description: Opening time in 24-hour HH:mm format.
-          example: "09:00"
-        close_time:
-          type: string
-          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
-          description: |
-            Closing time in 24-hour HH:mm format. If close_time < open_time,
-            the shift spans past midnight into the following morning.
-          example: "21:30"
-
     Supplier:
       type: object
       required:
         - id
         - name
-        - facility_type
-        - location
-        - operating_hours
-        - is_active
-        - is_open
-        - created_at
-        - updated_at
+        - facilityType
+        - building
+        - opensAt
+        - closesAt
+        - isActive
+        - isOpenNow
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -493,255 +507,329 @@ components:
           example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
         name:
           type: string
-          description: Unique supplier name.
+          maxLength: 100
+          description: Unique supplier name across the platform.
           example: Cool Spot
-        facility_type:
+        facilityType:
           type: string
-          description: Category of the facility.
+          maxLength: 50
+          description: Facility category (e.g. Food, Food/Coffee, Printing, Shopping).
           example: Food
-        location:
-          $ref: '#/components/schemas/Location'
-        operating_hours:
-          type: array
-          description: Scheduled operating shifts. Closed days are omitted.
-          items:
-            $ref: '#/components/schemas/OperatingHour'
-        is_active:
-          type: boolean
-          description: Master administrative status (active vs deactivated).
-          example: true
-        is_open:
-          type: boolean
-          description: Dynamically computed real-time operating status.
-          example: true
-        image_url:
+        building:
           type: string
-          format: uri
+          maxLength: 100
+          description: Campus building name.
+          example: Com 2
+        floor:
+          type: string
+          maxLength: 10
           nullable: true
-          description: URL to store image.
-          example: https://raw.githubusercontent.com/.../COOL_SPOT.jpeg
-        created_at:
+          description: Floor level identifier.
+          example: "1"
+        locationDescription:
+          type: string
+          maxLength: 300
+          nullable: true
+          description: Walking instructions or landmark description.
+          example: Opp LT16
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS latitude coordinate.
+          example: 1.2940156
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          description: GPS longitude coordinate.
+          example: 103.7738478
+        opensAt:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: Daily opening time in Singapore Time (24h HH:MM format).
+          example: "09:00"
+        closesAt:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          description: |
+            Daily closing time in Singapore Time (24h HH:MM format).
+            If closesAt < opensAt (e.g. 11:00 to 02:00), the stall spans past midnight.
+          example: "21:30"
+        isActive:
+          type: boolean
+          description: Admin master active/deactivated flag.
+          example: true
+        isOpenNow:
+          type: boolean
+          description: Real-time computed indicator evaluated against current Singapore time. Always false if isActive is false.
+          example: true
+        imageUrl:
+          type: string
+          maxLength: 500
+          nullable: true
+          description: Relative path (/v1/supplier-images/file.jpeg) or S3 URL.
+          example: /v1/supplier-images/COOL_SPOT.jpeg
+        createdAt:
           type: string
           format: date-time
           example: "2026-09-01T08:00:00Z"
-        updated_at:
+        updatedAt:
           type: string
           format: date-time
           example: "2026-09-22T00:15:00Z"
-      example:
-        id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-        name: Cool Spot
-        facility_type: Food
-        location:
-          building: Com 2
-          floor: "1"
-          description: Opp LT16
-          latitude: 1.2940156
-          longitude: 103.7738478
-        operating_hours:
-          - day_of_week: MONDAY
-            open_time: "09:00"
-            close_time: "21:30"
-          - day_of_week: TUESDAY
-            open_time: "09:00"
-            close_time: "21:30"
-          - day_of_week: WEDNESDAY
-            open_time: "09:00"
-            close_time: "21:30"
-          - day_of_week: THURSDAY
-            open_time: "09:00"
-            close_time: "21:30"
-          - day_of_week: FRIDAY
-            open_time: "09:00"
-            close_time: "21:30"
-        is_active: true
-        is_open: true
-        image_url: https://raw.githubusercontent.com/CS3219-AY2627S1/FoC-Template/main/data/images/COOL_SPOT.jpeg
-        created_at: "2026-09-01T08:00:00Z"
-        updated_at: "2026-09-22T00:15:00Z"
 
     CreateSupplierRequest:
       type: object
       required:
         - name
-        - facility_type
-        - location
-        - operating_hours
+        - facilityType
+        - building
+        - opensAt
+        - closesAt
       properties:
         name:
           type: string
+          minLength: 1
+          maxLength: 100
           example: Supersnacks
-        facility_type:
+        facilityType:
           type: string
+          minLength: 1
+          maxLength: 50
           example: Food
-        location:
-          $ref: '#/components/schemas/Location'
-        operating_hours:
-          type: array
-          items:
-            $ref: '#/components/schemas/OperatingHour'
-          example:
-            - day_of_week: THURSDAY
-              open_time: "11:00"
-              close_time: "02:00"
-            - day_of_week: FRIDAY
-              open_time: "11:00"
-              close_time: "02:00"
-        image_url:
+        building:
           type: string
-          format: uri
+          minLength: 1
+          maxLength: 100
+          example: Prince George's Park
+        floor:
+          type: string
+          maxLength: 10
           nullable: true
-          example: https://raw.githubusercontent.com/.../SUPERSNACKS.jpeg
+          example: "1"
+        locationDescription:
+          type: string
+          maxLength: 300
+          nullable: true
+          example: Block 10
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          example: 1.2913847
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          example: 103.7776367
+        opensAt:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          example: "11:00"
+        closesAt:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+          example: "02:00"
+        imageUrl:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: /v1/supplier-images/SUPERSNACKS.jpeg
 
     UpdateSupplierRequest:
       type: object
       properties:
         name:
           type: string
-          example: Supersnacks PGP
-        facility_type:
+          minLength: 1
+          maxLength: 100
+        facilityType:
           type: string
-          example: Food
-        location:
-          $ref: '#/components/schemas/Location'
-        operating_hours:
-          type: array
-          description: If provided, replaces all existing schedule entries.
-          items:
-            $ref: '#/components/schemas/OperatingHour'
-        image_url:
+          minLength: 1
+          maxLength: 50
+        building:
           type: string
-          format: uri
+          minLength: 1
+          maxLength: 100
+        floor:
+          type: string
+          maxLength: 10
+          nullable: true
+        locationDescription:
+          type: string
+          maxLength: 300
+          nullable: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
+        opensAt:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+        closesAt:
+          type: string
+          pattern: '^([01]\d|2[0-3]):([0-5]\d)$'
+        imageUrl:
+          type: string
+          maxLength: 500
           nullable: true
 
-    SupplierStatusResponse:
+    SingleSupplierResponse:
       type: object
       required:
-        - id
-        - is_active
-        - updated_at
+        - data
       properties:
-        id:
-          type: string
-          format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-        is_active:
-          type: boolean
-          example: false
-        updated_at:
-          type: string
-          format: date-time
-          example: "2026-09-22T00:10:00Z"
-
-    MassDeleteResponse:
-      type: object
-      required:
-        - deleted_count
-        - failed_count
-        - message
-      properties:
-        deleted_count:
-          type: integer
-          example: 2
-        failed_count:
-          type: integer
-          example: 0
-        message:
-          type: string
-          example: Successfully deleted 2 supplier(s)
-
-    PaginationMeta:
-      type: object
-      required:
-        - total
-        - limit
-        - offset
-      properties:
-        total:
-          type: integer
-          description: Total number of matching records.
-          example: 45
-        limit:
-          type: integer
-          description: Page size.
-          example: 20
-        offset:
-          type: integer
-          description: Record offset.
-          example: 0
+        data:
+          $ref: '#/components/schemas/Supplier'
 
     PaginatedSupplierResponse:
       type: object
       required:
         - data
-        - pagination
+        - page
+        - limit
+        - total
       properties:
         data:
           type: array
           items:
             $ref: '#/components/schemas/Supplier'
-        pagination:
-          $ref: '#/components/schemas/PaginationMeta'
-      example:
-        data:
-          - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-            name: Cool Spot
-            facility_type: Food
-            location:
-              building: Com 2
-              floor: "1"
-              description: Opp LT16
-              latitude: 1.2940156
-              longitude: 103.7738478
-            operating_hours:
-              - day_of_week: MONDAY
-                open_time: "09:00"
-                close_time: "21:30"
-              - day_of_week: TUESDAY
-                open_time: "09:00"
-                close_time: "21:30"
-            is_active: true
-            is_open: true
-            image_url: https://raw.githubusercontent.com/CS3219-AY2627S1/FoC-Template/main/data/images/COOL_SPOT.jpeg
-            created_at: "2026-09-01T08:00:00Z"
-            updated_at: "2026-09-22T00:15:00Z"
-          - id: 7b1c8f42-9a3e-4d56-b812-34567890abcd
-            name: Supersnacks
-            facility_type: Food
-            location:
-              building: Prince George's Park
-              floor: "1"
-              description: Block 10
-              latitude: 1.2913847
-              longitude: 103.7776367
-            operating_hours:
-              - day_of_week: THURSDAY
-                open_time: "11:00"
-                close_time: "02:00"
-              - day_of_week: FRIDAY
-                open_time: "11:00"
-                close_time: "02:00"
-            is_active: true
-            is_open: true
-            image_url: null
-            created_at: "2026-09-02T10:00:00Z"
-            updated_at: "2026-09-22T00:15:00Z"
-        pagination:
-          total: 2
-          limit: 20
-          offset: 0
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 45
 
-    ErrorResponse:
+    ErrorEnvelope:
       type: object
       required:
         - error
-        - message
       properties:
         error:
-          type: string
-          description: Machine-readable error code.
-          example: NAME_EXISTS
-        message:
-          type: string
-          description: Human-readable error description.
-          example: Supplier with this name already exists
+          type: object
+          required:
+            - code
+            - message
+            - details
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: Invalid input
+            details:
+              type: object
+              additionalProperties: true
+              example:
+                fieldErrors:
+                  name: This field is required
+
+  responses:
+    UnauthorizedError:
+      description: Missing, expired, or revoked authentication credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            TokenMissing:
+              value:
+                error:
+                  code: TOKEN_MISSING
+                  message: Authorization Bearer token is required
+                  details: {}
+            TokenInvalid:
+              value:
+                error:
+                  code: TOKEN_INVALID
+                  message: Token signature or issuer is invalid
+                  details: {}
+            TokenExpired:
+              value:
+                error:
+                  code: TOKEN_EXPIRED
+                  message: Access token has expired
+                  details: {}
+            SessionRevoked:
+              value:
+                error:
+                  code: SESSION_REVOKED
+                  message: User session was revoked or role changed
+                  details: {}
+
+    ForbiddenError:
+      description: Access denied due to insufficient permissions or account suspension.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            InsufficientRole:
+              value:
+                error:
+                  code: INSUFFICIENT_ROLE
+                  message: Admin role required for this action
+                  details:
+                    requiredRoles: ["admin"]
+            AccountSuspended:
+              value:
+                error:
+                  code: ACCOUNT_SUSPENDED
+                  message: Your account has been suspended
+                  details:
+                    reason: Repeated policy violations
+                    adminContact: admin@foc.nus.edu
+            AdminOnlyFilter:
+              value:
+                error:
+                  code: ADMIN_ONLY_FILTER
+                  message: Status filter 'inactive' or 'all' is reserved for administrators
+                  details: {}
+
+    NotFoundError:
+      description: Resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: SUPPLIER_NOT_FOUND
+              message: Supplier not found
+              details: {}
+
+    ValidationError:
+      description: Request payload or query parameters failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Invalid input
+              details:
+                fieldErrors:
+                  tags: This field is not allowed.
+
+    ServiceUnavailableError:
+      description: Downstream authentication service (Keycloak / User Service) is unavailable (fails closed).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: AUTH_SERVICE_UNAVAILABLE
+              message: Unable to reach authentication service
+              details: {}

@@ -57,8 +57,6 @@ export function SupplierDetailPage() {
             <dd>
               {supplier.opensAt} - {supplier.closesAt} {supplier.closesAt < supplier.opensAt && '(past midnight)'}
             </dd>
-            <dt>Tags</dt>
-            <dd>{supplier.tags.length ? supplier.tags.map((t) => <span key={t} className="badge">{t}</span>) : '-'}</dd>
           </dl>
         </div>
       </div>
