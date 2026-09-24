@@ -149,8 +149,10 @@ services:
 
   supplier-service:
     build:
-      context: .
-      dockerfile: supplier-service/Dockerfile
+      context: ./supplier-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./data:/app/data:ro
     environment:
       PORT: 3002
       LOG_LEVEL: ${LOG_LEVEL:-info}

@@ -1,47 +1,61 @@
-import { fileURLToPath } from 'node:url';
-import pg from 'pg';
-import {
-  cachedSessionChecker,
-  createAuthenticator,
-  createLogger,
-  remoteSessionChecker,
-  runMigrations,
-} from '@foc/shared-middleware';
-import { createApp } from './app.js';
-import { loadConfig } from './config.js';
-import type { AppContext } from './context.js';
-import { seedSuppliers } from './seed.js';
+import dotenv from 'dotenv';
+import { buildApp } from './app.js';
+import { createDb } from './db/connection.js';
+import { DrizzleSupplierRepository } from './db/drizzleRepository.js';
 
-export function buildContext(config = loadConfig()): AppContext {
-  const logger = createLogger('supplier-service', config.logLevel);
-  const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 20 });
-  const auth = createAuthenticator({
-    issuer: `${config.keycloak.publicUrl}/realms/${config.keycloak.realm}`,
-    jwksUrl: `${config.keycloak.internalUrl}/realms/${config.keycloak.realm}/protocol/openid-connect/certs`,
-    allowedClients: config.allowedTokenClients,
-  });
-  // Uses the User Service to confirm the session is live and the account not suspended (cached 5s).
-  const sessions = cachedSessionChecker(remoteSessionChecker(config.userServiceUrl, config.internalAuthSecret));
-  return { config, pool, auth, sessions, logger };
-}
+dotenv.config();
+
+const port = Number(process.env.PORT ?? 3002);
+const host = '0.0.0.0';
 
 async function main() {
-  const ctx = buildContext();
-  await runMigrations(ctx.pool, fileURLToPath(new URL('../migrations', import.meta.url)), ctx.logger);
-  if (ctx.config.seedOnStart) await seedSuppliers(ctx);
-  const server = createApp(ctx).listen(ctx.config.port, () => ctx.logger.info({ port: ctx.config.port }, 'Supplier Service listening'));
+  const { client, db } = createDb();
+
+  // Test DB connection readiness
+  let isDbReady = false;
+  try {
+    await client`SELECT 1`;
+    isDbReady = true;
+    console.log('Connected to PostgreSQL successfully.');
+  } catch (err) {
+    console.error('Failed to connect to PostgreSQL:', err);
+  }
+
+  const repository = new DrizzleSupplierRepository(db);
+
+  const app = await buildApp({
+    dbReady: isDbReady,
+    repository,
+    imagesDir: process.env.IMAGES_DIR,
+    authConfig: {
+      issuer: process.env.KEYCLOAK_PUBLIC_URL
+        ? `${process.env.KEYCLOAK_PUBLIC_URL}/realms/${process.env.KEYCLOAK_REALM ?? 'campuserrand'}`
+        : 'http://localhost:8080/realms/campuserrand',
+      jwksUri: process.env.KEYCLOAK_INTERNAL_URL
+        ? `${process.env.KEYCLOAK_INTERNAL_URL}/realms/${process.env.KEYCLOAK_REALM ?? 'campuserrand'}/protocol/openid-connect/certs`
+        : undefined,
+      userServiceUrl: process.env.USER_SERVICE_URL ?? 'http://user-service:3001',
+      internalAuthSecret: process.env.INTERNAL_AUTH_SECRET,
+    },
+  });
+
+  try {
+    await app.listen({ port, host });
+    console.log(`Supplier Service listening at http://${host}:${port}`);
+  } catch (err) {
+    console.error('Error starting server:', err);
+    process.exit(1);
+  }
+
   const shutdown = async () => {
-    server.close();
-    await ctx.pool.end();
+    console.log('Gracefully shutting down Supplier Service...');
+    await app.close();
+    await client.end();
     process.exit(0);
   };
-  process.on('SIGTERM', () => void shutdown());
-  process.on('SIGINT', () => void shutdown());
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
-}
+main();
