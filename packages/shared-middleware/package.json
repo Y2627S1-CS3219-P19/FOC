@@ -1,0 +1,30 @@
+{
+  "name": "@foc/shared-middleware",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Auth (Keycloak JWT), RBAC, error envelope, validation, correlation-id and logging shared by every FoC service",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "jose": "^6.0.11",
+    "pg": "^8.23.0",
+    "pino": "^9.7.0",
+    "pino-http": "^10.5.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/pg": "^8.23.1"
+  }
+}

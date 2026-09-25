@@ -1,0 +1,27 @@
+{
+  "name": "@foc/shared-events",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Event contracts and the RabbitMQ transactional-outbox publisher shared by FoC services",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.8",
+    "pg": "^8.16.3",
+    "pino": "^9.7.0"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.7",
+    "@types/pg": "^8.15.4"
+  }
+}

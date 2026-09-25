@@ -1,0 +1,238 @@
+openapi: 3.0.3
+info:
+  title: FoC User Service
+  version: 0.1.0
+  description: |
+    Profiles, role-based access control and admin workflows for Friend on Campus.
+
+    **Login is not an endpoint here.** Users log in on Keycloak's page (OAuth 2.0 Authorization Code + PKCE)
+    and send the access token as `Authorization: Bearer <token>`. For quick testing, get a token with the
+    dev-only `campuserrand-test` client:
+
+    ```
+    curl -X POST http://localhost:8080/realms/campuserrand/protocol/openid-connect/token \
+      -d grant_type=password -d client_id=campuserrand-test -d username=<u> -d password=<p>
+    ```
+
+    Errors always look like `{ "error": { "code", "message", "details" } }`.
+    401 = not logged in / token invalid or revoked. 403 = logged in but not allowed (wrong role, suspended).
+servers:
+  - url: http://localhost:3001
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internal:
+      type: apiKey
+      in: header
+      name: X-Internal-Auth
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: INSUFFICIENT_ROLE }
+            message: { type: string }
+            details: { type: object }
+    Profile:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string }
+        displayName: { type: string }
+        contactNumber: { type: string, nullable: true }
+        defaultDeliveryLocation: { type: string, nullable: true }
+        role: { type: string, enum: [user, admin] }
+        status: { type: string, enum: [active, suspended] }
+        rating: { type: number, nullable: true }
+    RoleChange:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        targetUserId: { type: string, format: uuid }
+        fromRole: { type: string, enum: [user, admin] }
+        toRole: { type: string, enum: [user, admin] }
+        status: { type: string, enum: [pending, approved, rejected] }
+        requestedBy: { type: string, format: uuid }
+        decidedBy: { type: string, format: uuid, nullable: true }
+  responses:
+    Unauthorized: { description: Not logged in, token invalid/expired, or session ended, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Logged in but not allowed (role, suspension), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Validation: { description: Validation failed (details.fieldErrors), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Conflicting state, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+paths:
+  /v1/auth/register:
+    post:
+      tags: [Public]
+      summary: Sign up (F1). Role is always `user`; a verification email is sent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username, email, password, confirmPassword]
+              properties:
+                username: { type: string, example: alice_tan }
+                email: { type: string, example: e0123456@u.nus.edu }
+                password: { type: string, example: Password1 }
+                confirmPassword: { type: string, example: Password1 }
+      responses:
+        '201': { description: Created }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { description: Too many sign-ups from this IP (5 per hour) }
+  /v1/users/me:
+    get:
+      tags: [Profile]
+      summary: My profile (F3.1). Suspended users see the reason and admin contact.
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Profile]
+      summary: Update my profile (F4.1). Only displayName, contactNumber, defaultDeliveryLocation.
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                displayName: { type: string }
+                contactNumber: { type: string, nullable: true, example: '+65 9123 4567' }
+                defaultDeliveryLocation: { type: string, nullable: true, example: 'PGP House 7' }
+      responses:
+        '200': { description: Updated }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: List/search users (F30.1-30.2)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, suspended] } }
+        - { name: role, in: query, schema: { type: string, enum: [user, admin] } }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200': { description: OK }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /v1/admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: One user
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK }, '404': { description: Not found } }
+  /v1/admin/users/{id}/suspend:
+    patch:
+      tags: [Admin]
+      summary: Suspend a user with a reason (F30.3). Ends their sessions immediately (F4.2.1).
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } }
+      responses: { '200': { description: Suspended }, '409': { $ref: '#/components/responses/Conflict' } }
+  /v1/admin/users/{id}/reinstate:
+    patch:
+      tags: [Admin]
+      summary: Reinstate a suspended user (F30.4)
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Reinstated }, '409': { $ref: '#/components/responses/Conflict' } }
+  /v1/admin/role-changes:
+    get:
+      tags: [Admin - roles]
+      summary: List role change requests
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Admin - roles]
+      summary: Request a promotion/demotion (step 1 of 2, F29.2). Does not change the role yet.
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId, newRole]
+              properties:
+                targetUserId: { type: string, format: uuid }
+                newRole: { type: string, enum: [user, admin] }
+                reason: { type: string }
+      responses:
+        '201': { description: Pending request created, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/RoleChange' } } } } } }
+        '409': { description: 'ROLE_UNCHANGED, REQUEST_PENDING, USER_SUSPENDED or LAST_ADMIN' }
+  /v1/admin/role-changes/{id}/confirm:
+    post:
+      tags: [Admin - roles]
+      summary: Confirm (step 2 of 2). Must be a DIFFERENT admin; blocked if it would leave no admin.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        '200': { description: Applied }
+        '403': { description: SAME_ADMIN_CANNOT_CONFIRM }
+        '409': { description: 'LAST_ADMIN or ROLE_CHANGE_NOT_PENDING' }
+  /v1/admin/role-changes/{id}/reject:
+    post:
+      tags: [Admin - roles]
+      summary: Reject (or, by the requester, cancel) a pending request
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Rejected } }
+  /v1/admin/audit/actions:
+    get:
+      tags: [Admin]
+      summary: Immutable admin audit trail (NFR18.2)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: action, in: query, schema: { type: string } }
+        - { name: adminId, in: query, schema: { type: string, format: uuid } }
+        - { name: targetId, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses: { '200': { description: OK } }
+  /v1/internal/users/{id}/summary:
+    get:
+      tags: [Internal (services only)]
+      summary: User summary for other services (F3.2) - no PII
+      security: [{ internal: [] }]
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK }, '401': { description: Missing/wrong X-Internal-Auth }, '403': { description: A user token was sent } }
+  /v1/internal/auth/introspect:
+    post:
+      tags: [Internal (services only)]
+      summary: Check a user token - valid, session still live, account not suspended (NFR6.1)
+      security: [{ internal: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } }
+      responses: { '200': { description: '{ data: { active, status, userId, roles } }' } }
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness (DB + Keycloak)
+      responses: { '200': { description: UP }, '503': { description: DOWN } }
