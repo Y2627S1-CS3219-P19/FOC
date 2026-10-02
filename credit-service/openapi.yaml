@@ -1,0 +1,247 @@
+openapi: 3.0.3
+info:
+  title: FoC Credit Service
+  description: Manages the closed credit economy for the Friend on Campus platform.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3003
+    description: Local development
+
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: UP
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Service is ready
+        '503':
+          description: Service is not ready
+
+  /v1/credits/wallet:
+    get:
+      tags: [Credits]
+      summary: Get current wallet balance
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wallet balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Wallet'
+        '401':
+          description: Not authenticated
+
+  /v1/credits/reservations:
+    get:
+      tags: [Credits]
+      summary: List credit reservations for current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Paginated list of reservations
+        '401':
+          description: Not authenticated
+
+  /v1/credits/history:
+    get:
+      tags: [Credits]
+      summary: Credit transaction history for current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Paginated ledger entries
+        '401':
+          description: Not authenticated
+
+  /v1/admin/credits/summary:
+    get:
+      tags: [Admin]
+      summary: Credit economy summary
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Total credits in circulation
+        '403':
+          description: Admin role required
+
+  /v1/admin/credits/users/{userId}/history:
+    get:
+      tags: [Admin]
+      summary: View a user's credit history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Paginated ledger entries for the user
+        '403':
+          description: Admin role required
+
+  /v1/admin/credits/adjustments:
+    post:
+      tags: [Admin]
+      summary: Manual credit adjustment (not yet implemented)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustmentRequest'
+      responses:
+        '501':
+          description: Not yet implemented
+
+  /v1/admin/credits/reconciliation:
+    get:
+      tags: [Admin]
+      summary: Reconciliation report (not yet implemented)
+      security:
+        - bearerAuth: []
+      responses:
+        '501':
+          description: Not yet implemented
+
+  /v1/admin/credits/users/{userId}/balance-at:
+    get:
+      tags: [Admin]
+      summary: Historical balance at a point in time (not yet implemented)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: ts
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '501':
+          description: Not yet implemented
+
+  /v1/internal/credits/reserve:
+    post:
+      tags: [Internal]
+      summary: Reserve credits for an order (service-to-service)
+      description: Idempotent on orderId. Called by Order Service via X-Internal-Auth.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+      responses:
+        '200':
+          description: Reservation created or already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Reservation'
+        '401':
+          description: Missing or invalid internal auth
+        '409':
+          description: Insufficient balance
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Wallet:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        availableBalance:
+          type: integer
+        reservedBalance:
+          type: integer
+        totalBalance:
+          type: integer
+
+    Reservation:
+      type: object
+      properties:
+        reservationId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        amount:
+          type: integer
+        status:
+          type: string
+          enum: [HELD, SETTLED, RELEASED]
+
+    ReserveRequest:
+      type: object
+      required: [orderId, requesterId, amount]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        requesterId:
+          type: string
+          format: uuid
+        amount:
+          type: integer
+          minimum: 1
+
+    AdjustmentRequest:
+      type: object
+      required: [userId, amount, reason]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        amount:
+          type: integer
+        reason:
+          type: string
