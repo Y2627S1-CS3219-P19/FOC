@@ -1,0 +1,183 @@
+FRIEND ON CAMPUS (FoC) - LOCAL SETUP
+=====================================
+How to run the whole stack on your machine after pulling. Takes about 10 minutes,
+most of it waiting for the first Docker build.
+
+
+1. WHAT YOU NEED
+----------------
+- Docker Desktop, running. This is the only thing needed to RUN the app.
+- Node.js 22+ and npm. Only needed to run the TESTS or to edit code outside Docker.
+- These ports free: 5173, 8080, 8025, 3001, 3002, 5433, 5434, 5672, 15672
+
+All commands below are run from the FOC/ folder.
+
+
+2. CREATE YOUR .env
+-------------------
+    cp .env.example .env
+
+  Windows PowerShell:  Copy-Item .env.example .env
+
+Open .env and replace every "change-me-..." value with any random string.
+Nothing has to match what a teammate uses - everyone runs their own Keycloak and
+their own databases. These are local-only secrets.
+
+Two values you must actually think about:
+
+  BOOTSTRAP_ADMIN_EMAIL          any @u.nus.edu address - this becomes the first admin
+  BOOTSTRAP_ADMIN_TEMP_PASSWORD  8+ characters with an uppercase, a lowercase and a digit
+                                 (e.g. ChangeMe123) - you must change it at first login
+
+.env is git-ignored. Never commit it.
+
+
+3. START EVERYTHING
+-------------------
+    docker compose up -d --build
+
+First run pulls images and builds, so give it a few minutes. Keycloak alone takes
+about a minute to become healthy. Check progress with:
+
+    docker compose ps
+
+Wait until every service says "healthy". mailpit and frontend have no healthcheck,
+so they just say "running" - that is fine. If something says "unhealthy", jump to
+section 9.
+
+
+4. URLS
+-------
+Web app                       http://localhost:5173
+Keycloak admin console        http://localhost:8080   (KC_BOOTSTRAP_ADMIN_USERNAME / _PASSWORD from .env)
+Fake email inbox (Mailpit)    http://localhost:8025   (ALL verification + reset emails land here)
+User Service API docs         http://localhost:3001/v1/docs
+Supplier Service API docs     http://localhost:3002/v1/docs
+RabbitMQ management UI        http://localhost:15672  (RABBITMQ_USER / RABBITMQ_PASSWORD from .env)
+
+The web app is also the local API gateway, so the browser only ever talks to
+localhost:5173 and localhost:8080.
+
+
+5. FIRST LOGIN
+--------------
+As the admin:
+  1. Go to http://localhost:5173 and log in with BOOTSTRAP_ADMIN_USERNAME and
+     BOOTSTRAP_ADMIN_TEMP_PASSWORD from your .env.
+  2. Keycloak makes you set a new password immediately.
+  3. You now have the admin pages: Admin users, Admin role changes, and the
+     create/edit/delete buttons on suppliers.
+
+The admin is created ONCE, on the first start, and never again.
+
+As a normal user:
+  1. Sign up on the web app with any @u.nus.edu email.
+  2. Open Mailpit (http://localhost:8025) and click the "Verify email" link.
+     No real email is ever sent.
+  3. Log in. You can browse suppliers but not edit them.
+
+To test suspension: log in as admin, suspend the normal user, then use the normal
+user's tab. Within about 5 seconds every action returns "account suspended".
+
+
+6. RUN THE TESTS
+----------------
+The stack from section 3 must be running first - the tests use the real Keycloak
+and the real databases.
+
+    npm install
+    npm test
+
+They read your .env, create their own test databases (users_test, suppliers_test),
+and clean up the Keycloak users they create. Your app data is not touched.
+
+If you only want one service, build the shared packages first - the services import
+them as compiled code:
+
+    npm run build:packages
+    npm test -w user-service
+    npm test -w supplier-service
+
+
+7. GET A TOKEN FOR CURL / POSTMAN
+---------------------------------
+Dev only, and the account must have a verified email.
+
+    curl -X POST http://localhost:8080/realms/campuserrand/protocol/openid-connect/token \
+      -d grant_type=password -d client_id=campuserrand-test \
+      -d username=<username> -d password=<password>
+
+Take "access_token" from the response and send it as:
+
+    Authorization: Bearer <access_token>
+
+Tokens last 5 minutes. Get a new one when you start seeing 401 TOKEN_EXPIRED.
+
+
+8. EVERYDAY COMMANDS
+--------------------
+Stop, keep data                  docker compose down
+Start again                      docker compose up -d
+Rebuild after pulling new code   docker compose up -d --build
+Logs for one service             docker compose logs -f user-service
+Logs for everything              docker compose logs -f
+Reset EVERYTHING (wipes data)    docker compose down -v
+
+"docker compose down -v" deletes the databases, so you lose all users, suppliers
+and the admin. The next start re-creates the admin and re-seeds the suppliers.
+
+
+9. TROUBLESHOOTING
+------------------
+Changed the Keycloak realm, the client secret or the bootstrap admin, and nothing
+happened?
+  These are only applied when the databases are EMPTY. Run:
+      docker compose down -v
+      docker compose up -d --build
+
+"port is already allocated"
+  Something else is on that port (often an old stack, or Postgres installed on your
+  machine using 5432/5433). Stop it, or run "docker compose down" in the other project.
+
+A service stays "unhealthy"
+  docker compose logs <service-name>
+  Almost always a missing or malformed value in .env.
+
+Never got the verification email
+  It is in Mailpit at http://localhost:8025, not in your real inbox.
+
+Everything returns 401 right after logging in
+  Your browser and the containers must agree on the Keycloak URL. Use
+  http://localhost:5173 exactly - not 127.0.0.1, not your machine's LAN IP. The token's
+  issuer is fixed to http://localhost:8080 and the services check it.
+
+Supplier pages return 503
+  The Supplier Service cannot reach the User Service to check your session. Confirm
+  user-service is healthy: docker compose ps
+
+"npm test" fails with a connection error
+  The stack is not running, or it is still starting. Check "docker compose ps" first.
+
+Docker build fails on "npm ci"
+  Delete node_modules and try again. node_modules is git-ignored and is never shared
+  between machines - each person installs their own.
+
+
+10. WHAT IS RUNNING
+-------------------
+  frontend          React web app + local API gateway          port 5173
+  user-service      accounts, profiles, admin, audit           port 3001
+  supplier-service  supplier directory                         port 3002
+  keycloak          login, passwords, sessions, tokens         port 8080
+  users-db          Postgres for the User Service              port 5433
+  suppliers-db      Postgres for the Supplier Service          port 5434
+  keycloak-db       Postgres for Keycloak                      internal only
+  rabbitmq          events between services                    ports 5672 / 15672
+  mailpit           catches outgoing email                     port 8025
+
+Order Service and Credit Service are not built yet.
+
+More detail:
+  README.md   - overview and structure
+  API.md      - every endpoint, request and response
+  AUTH.md     - how Keycloak and the User Service split the work
