@@ -173,6 +173,53 @@ services:
       <<: *healthcheck-defaults
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3002/health/ready"]
 
+  # ---------- Credit Service ----------
+  credits-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: credits_db
+      POSTGRES_USER: credits
+      POSTGRES_PASSWORD: ${CREDITS_DB_PASSWORD}
+    ports:
+      - "5435:5432"
+    volumes:
+      - credits-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U credits -d credits_db"]
+
+  credit-service:
+    build:
+      context: .
+      dockerfile: credit-service/Dockerfile
+    environment:
+      PORT: 3003
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://credits:${CREDITS_DB_PASSWORD}@credits-db:5432/credits_db
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:8080
+      KEYCLOAK_REALM: campuserrand
+      USER_SERVICE_URL: http://user-service:3001
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET}
+      AMQP_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      DEBUG_EVENT_QUEUE: ${DEBUG_EVENT_QUEUE:-true}
+      INITIAL_CREDIT_BALANCE: 100
+      TRUST_PROXY: "1"
+    ports:
+      - "3003:3003"
+    depends_on:
+      credits-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/health/ready"]
+
   # ---------- Web app (also acts as the local API gateway) ----------
   frontend:
     build:
@@ -185,9 +232,12 @@ services:
         condition: service_healthy
       supplier-service:
         condition: service_healthy
+      credit-service:
+        condition: service_healthy
 
 volumes:
   keycloak-db-data:
   users-db-data:
   suppliers-db-data:
+  credits-db-data:
   rabbitmq-data:
