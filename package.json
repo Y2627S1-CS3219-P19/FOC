@@ -7,13 +7,14 @@
     "packages/*",
     "user-service",
     "supplier-service",
+    "credit-service",
     "frontend"
   ],
   "scripts": {
     "build:packages": "npm run build -w @foc/shared-middleware -w @foc/shared-events",
-    "build": "npm run build:packages && npm run build -w user-service -w supplier-service",
-    "typecheck": "npm run build:packages && npm run typecheck -w user-service -w supplier-service -w frontend",
-    "test": "npm run build:packages && npm run test -w user-service -w supplier-service"
+    "build": "npm run build:packages && npm run build -w user-service -w supplier-service -w credit-service",
+    "typecheck": "npm run build:packages && npm run typecheck -w user-service -w supplier-service -w credit-service -w frontend",
+    "test": "npm run build:packages && npm run test -w user-service -w supplier-service -w credit-service"
   },
   "engines": {
     "node": ">=22"
