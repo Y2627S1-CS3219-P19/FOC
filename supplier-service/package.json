@@ -11,6 +11,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",
+    "demo": "vitest run test/demo.test.ts",
+    "demo:interactive": "node scripts/demo-interactive.js",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
