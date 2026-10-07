@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-import { sql } from 'drizzle-orm';
 import { createDb } from './connection.js';
 import * as schema from './schema.js';
 import { parseSeedCsv } from './seedParser.js';
@@ -12,22 +11,34 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function runSeed() {
+export async function runSeed(
+  dbInstance?: ReturnType<typeof createDb>['db'],
+  customCsvPath?: string
+): Promise<{ insertedCount: number }> {
   console.log('Seeding campus suppliers...');
   const csvPath =
+    customCsvPath ??
     process.env.SEED_CSV_PATH ??
     path.resolve(__dirname, '../../../data/csv/supplier-seed-data.csv');
 
   if (!fs.existsSync(csvPath)) {
-    console.error(`Seed CSV file not found at: ${csvPath}`);
-    process.exit(1);
+    console.warn(`Seed CSV file not found at: ${csvPath}, skipping seeding.`);
+    return { insertedCount: 0 };
   }
 
   const csvContent = fs.readFileSync(csvPath, 'utf8');
   const records = parseSeedCsv(csvContent);
   console.log(`Parsed ${records.length} records from CSV.`);
 
-  const { client, db } = createDb();
+  const shouldClose = !dbInstance;
+  let clientToClose: ReturnType<typeof createDb>['client'] | null = null;
+  let db = dbInstance;
+
+  if (!db) {
+    const conn = createDb();
+    clientToClose = conn.client;
+    db = conn.db;
+  }
 
   try {
     let insertedCount = 0;
@@ -55,13 +66,20 @@ async function runSeed() {
       }
     }
 
-    console.log(`Seeding completed. Inserted ${insertedCount} new suppliers (${records.length - insertedCount} already existed).`);
+    console.log(
+      `Seeding completed. Inserted ${insertedCount} new suppliers (${records.length - insertedCount} already existed).`
+    );
+    return { insertedCount };
   } catch (err) {
     console.error('Seeding failed:', err);
-    process.exit(1);
+    throw err;
   } finally {
-    await client.end();
+    if (shouldClose && clientToClose) {
+      await clientToClose.end();
+    }
   }
 }
 
-runSeed();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  runSeed().catch(() => process.exit(1));
+}

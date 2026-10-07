@@ -9,19 +9,32 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function runMigrations() {
+export async function runMigrations(dbInstance?: ReturnType<typeof createDb>['db']) {
   console.log('Running database migrations...');
-  const { client, db } = createDb();
+  const shouldClose = !dbInstance;
+  let clientToClose: ReturnType<typeof createDb>['client'] | null = null;
+  let db = dbInstance;
+
+  if (!db) {
+    const conn = createDb();
+    clientToClose = conn.client;
+    db = conn.db;
+  }
+
   try {
     const migrationsFolder = path.resolve(__dirname, '../../migrations');
     await migrate(db, { migrationsFolder });
     console.log('Database migrations completed successfully.');
   } catch (err) {
     console.error('Migration failed:', err);
-    process.exit(1);
+    throw err;
   } finally {
-    await client.end();
+    if (shouldClose && clientToClose) {
+      await clientToClose.end();
+    }
   }
 }
 
-runMigrations();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  runMigrations().catch(() => process.exit(1));
+}

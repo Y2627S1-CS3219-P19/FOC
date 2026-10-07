@@ -2,6 +2,8 @@ import dotenv from 'dotenv';
 import { buildApp } from './app.js';
 import { createDb } from './db/connection.js';
 import { DrizzleSupplierRepository } from './db/drizzleRepository.js';
+import { runMigrations } from './db/migrate.js';
+import { runSeed } from './db/seed.js';
 
 dotenv.config();
 
@@ -17,8 +19,11 @@ async function main() {
     await client`SELECT 1`;
     isDbReady = true;
     console.log('Connected to PostgreSQL successfully.');
+
+    await runMigrations(db);
+    await runSeed(db);
   } catch (err) {
-    console.error('Failed to connect to PostgreSQL:', err);
+    console.error('Database connection or initialization error:', err);
   }
 
   const repository = new DrizzleSupplierRepository(db);
