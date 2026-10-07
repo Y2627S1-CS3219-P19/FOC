@@ -60,3 +60,66 @@ export const USER_EVENTS = {
   reinstated: defineEvent<UserReinstatedPayload>('UserReinstated', EXCHANGES.user, 'user.reinstated'),
   roleChanged: defineEvent<UserRoleChangedPayload>('UserRoleChanged', EXCHANGES.user, 'user.role_changed'),
 } as const;
+
+// ── Order events (published by order-service, consumed by credit-service) ──
+
+export interface OrderCreatedPayload {
+  orderId: string;
+  requesterId: string;
+  creditAmount: number;
+}
+export interface OrderCompletedPayload {
+  orderId: string;
+  requesterId: string;
+  runnerId: string;
+  creditAmount: number;
+}
+export interface OrderWithdrawnPayload {
+  orderId: string;
+}
+export interface OrderCancelledPayload {
+  orderId: string;
+  cancelledBy: string;
+}
+export interface OrderExpiredPayload {
+  orderId: string;
+}
+
+export const ORDER_EVENTS = {
+  created: defineEvent<OrderCreatedPayload>('OrderCreated', EXCHANGES.order, 'order.created'),
+  completed: defineEvent<OrderCompletedPayload>('OrderCompleted', EXCHANGES.order, 'order.completed'),
+  withdrawn: defineEvent<OrderWithdrawnPayload>('OrderWithdrawn', EXCHANGES.order, 'order.withdrawn'),
+  cancelled: defineEvent<OrderCancelledPayload>('OrderCancelled', EXCHANGES.order, 'order.cancelled'),
+  expired: defineEvent<OrderExpiredPayload>('OrderExpired', EXCHANGES.order, 'order.expired'),
+} as const;
+
+// ── Credit events (published by credit-service) ──
+
+export interface CreditWalletCreatedPayload {
+  userId: string;
+  initialBalance: number;
+}
+export interface CreditsReservedPayload {
+  orderId: string;
+  requesterId: string;
+  amount: number;
+}
+export interface CreditsReturnedPayload {
+  orderId: string;
+  requesterId: string;
+  amount: number;
+  reason: string;
+}
+export interface CreditsReleasedPayload {
+  orderId: string;
+  requesterId: string;
+  runnerId: string;
+  amount: number;
+}
+
+export const CREDIT_EVENTS = {
+  walletCreated: defineEvent<CreditWalletCreatedPayload>('CreditWalletCreated', EXCHANGES.credit, 'credit.wallet_created'),
+  reserved: defineEvent<CreditsReservedPayload>('CreditsReserved', EXCHANGES.credit, 'credit.reserved'),
+  returned: defineEvent<CreditsReturnedPayload>('CreditsReturned', EXCHANGES.credit, 'credit.returned'),
+  released: defineEvent<CreditsReleasedPayload>('CreditsReleased', EXCHANGES.credit, 'credit.released'),
+} as const;
