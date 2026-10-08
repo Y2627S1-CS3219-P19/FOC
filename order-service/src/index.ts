@@ -14,6 +14,7 @@ import { loadConfig, type Config } from './config.js';
 import type { AppContext } from './context.js';
 import { createPool } from './db.js';
 import { startCreditConsumer } from './events/creditConsumer.js';
+import { startOutboxMonitor } from './jobs/outboxMonitor.js';
 import { startSweepers } from './jobs/sweepers.js';
 
 /** Tests pass overrides to swap in fake auth, sessions or clients. */
@@ -53,8 +54,9 @@ async function main() {
         debugQueue: config.debugEventQueue ? 'debug.all-order-events' : undefined,
       })
     : null;
-  const consumer = config.amqpUrl ? startCreditConsumer({ pool, amqpUrl: config.amqpUrl, logger }) : null;
-  if (!config.amqpUrl) logger.warn('AMQP_URL not set: events stay in outbox_events and credit replies are not consumed');
+  const consumer = config.amqpUrl ? startCreditConsumer({ pool, amqpUrl: config.amqpUrl, logger, retryDelayMs: config.consumerRetryDelayMs }) : null;
+  if (consumer) ctx.broker = consumer;
+  else logger.warn('AMQP_URL not set: events stay in outbox_events and credit replies are not consumed');
   const sweepers = startSweepers({
     pool,
     logger,
@@ -62,6 +64,7 @@ async function main() {
     autoConfirmAfterHours: config.autoConfirmAfterHours,
     pendingTimeoutSeconds: config.pendingTimeoutSeconds,
   });
+  const outboxMonitor = startOutboxMonitor(pool, logger, consumer ?? undefined);
 
   const server = createApp(ctx).listen(config.port, () => logger.info({ port: config.port }, 'Order Service listening'));
 
@@ -69,6 +72,7 @@ async function main() {
     logger.info({ signal }, 'Shutting down');
     server.close();
     sweepers.stop();
+    outboxMonitor.stop();
     await consumer?.stop();
     await relay?.stop();
     await pool.end();

@@ -10,6 +10,11 @@ export interface Clients {
   user: UserClient;
 }
 
+export interface Broker {
+  isConnected(): boolean;
+  dlqDepth(): Promise<number | null>;
+}
+
 export interface AppContext {
   config: Config;
   pool: pg.Pool;
@@ -18,4 +23,6 @@ export interface AppContext {
   sessions: SessionChecker;
   clients: Clients;
   logger: Logger;
+  /** RabbitMQ connection state and dead-letter queue depth, or undefined when AMQP_URL is not set. */
+  broker?: Broker;
 }

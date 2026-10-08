@@ -1,4 +1,4 @@
-import amqp, { type Channel, type ChannelModel, type ConsumeMessage } from 'amqplib';
+import amqp, { type ChannelModel, type ConfirmChannel, type ConsumeMessage } from 'amqplib';
 import type pg from 'pg';
 import type { Logger } from 'pino';
 import { CREDIT_EVENTS, EXCHANGES, type CreditsReservedPayload, type EventEnvelope } from '@foc/shared-events';
@@ -7,6 +7,11 @@ import { applyTransition } from '../services/transitionService.js';
 import { CREDIT_RESERVATION_FAILED, type CreditReservationFailedPayload } from './localEvents.js';
 
 const QUEUE = 'order-service.credit-events';
+/** Failed messages wait here, then RabbitMQ moves them back to QUEUE (dead-letter routing on expiry). */
+const RETRY_QUEUE = `${QUEUE}.retry`;
+/** Messages that failed MAX_ATTEMPTS times. Nothing reads this queue: a person looks at it in the RabbitMQ UI. */
+export const DEAD_LETTER_QUEUE = `${QUEUE}.dlq`;
+export const MAX_ATTEMPTS = 5;
 const ROUTING_KEYS = [CREDIT_EVENTS.reserved.routingKey, CREDIT_RESERVATION_FAILED.routingKey];
 
 export type HandleResult = 'applied' | 'duplicate' | 'ignored';
@@ -73,36 +78,84 @@ export async function handleCreditEvent(pool: pg.Pool, envelope: EventEnvelope, 
   });
 }
 
+/** What to do after a failed attempt: try again later, or give up and dead-letter it. */
+export function afterFailure(previousAttempts: number): { attempt: number; deadLetter: boolean } {
+  const attempt = previousAttempts + 1;
+  return { attempt, deadLetter: attempt >= MAX_ATTEMPTS };
+}
+
 export interface CreditConsumer {
+  /** True while the consumer has an open channel to RabbitMQ. Used by /health/ready. */
+  isConnected(): boolean;
+  /** Messages waiting in the dead-letter queue, or null when not connected. */
+  dlqDepth(): Promise<number | null>;
   stop(): Promise<void>;
 }
 
-/** Durable queue, manual ack, reconnects after 5s. Same shape as credit-service/src/consumer.ts. */
-export function startCreditConsumer(options: { pool: pg.Pool; amqpUrl: string; logger: Logger }): CreditConsumer {
-  const { pool, amqpUrl, logger } = options;
+export interface CreditConsumerOptions {
+  pool: pg.Pool;
+  amqpUrl: string;
+  logger: Logger;
+  retryDelayMs: number;
+}
+
+/**
+ * Durable queue, manual ack, reconnects after 5s. A failed message is retried after retryDelayMs, up to
+ * MAX_ATTEMPTS times, then moved to the dead-letter queue, so one bad message never blocks the queue.
+ */
+export function startCreditConsumer(options: CreditConsumerOptions): CreditConsumer {
+  const { pool, amqpUrl, logger, retryDelayMs } = options;
   let connection: ChannelModel | null = null;
-  let channel: Channel | null = null;
+  let channel: ConfirmChannel | null = null;
   let stopped = false;
 
   const retryLater = () => {
     if (!stopped) setTimeout(() => void setup(), 5_000);
   };
 
-  async function onMessage(ch: Channel, msg: ConsumeMessage) {
+  /** Copies the message to the retry queue or the DLQ, waits for RabbitMQ to confirm, then acks the original. */
+  async function onFailure(ch: ConfirmChannel, msg: ConsumeMessage, error: string, eventId: string | undefined, giveUp = false) {
+    const headers = msg.properties.headers ?? {};
+    const next = afterFailure(Number(headers['x-attempts'] ?? 0));
+    const attempt = next.attempt;
+    const deadLetter = giveUp || next.deadLetter;
+    const target = deadLetter ? DEAD_LETTER_QUEUE : RETRY_QUEUE;
+    // After a retry the message comes back with the queue name as routing key, so keep the first one.
+    const originalRoutingKey = String(headers['x-original-routing-key'] ?? msg.fields.routingKey);
+    ch.sendToQueue(target, msg.content, {
+      persistent: true,
+      contentType: msg.properties.contentType,
+      messageId: msg.properties.messageId,
+      expiration: deadLetter ? undefined : String(retryDelayMs),
+      headers: { ...headers, 'x-attempts': attempt, 'x-last-error': error.slice(0, 500), 'x-original-routing-key': originalRoutingKey },
+    });
+    await ch.waitForConfirms();
+    ch.ack(msg);
+    const fields = { eventId, routingKey: originalRoutingKey, attempt, maxAttempts: MAX_ATTEMPTS, err: error, correlationId: headers['x-correlation-id'] };
+    if (deadLetter) logger.error({ ...fields, queue: DEAD_LETTER_QUEUE }, 'Message dead-lettered');
+    else logger.warn({ ...fields, retryInMs: retryDelayMs }, 'Retry scheduled');
+  }
+
+  async function onMessage(ch: ConfirmChannel, msg: ConsumeMessage) {
     let envelope: EventEnvelope;
     try {
       envelope = JSON.parse(msg.content.toString()) as EventEnvelope;
     } catch {
-      logger.error('Credit event is not valid JSON; discarded');
-      ch.ack(msg);
+      // Retrying cannot fix bad JSON: straight to the DLQ.
+      await onFailure(ch, msg, 'Message is not valid JSON', undefined, true).catch((err) =>
+        logger.error({ err: (err as Error).message }, 'Could not dead-letter a credit event'),
+      );
       return;
     }
     try {
       await handleCreditEvent(pool, envelope, logger);
       ch.ack(msg);
     } catch (err) {
-      logger.error({ eventId: envelope.eventId, err: (err as Error).message }, 'Credit event failed; requeued');
-      ch.nack(msg, false, true);
+      await onFailure(ch, msg, (err as Error).message, envelope.eventId).catch((sendErr) => {
+        // Could not reach the retry queue either: put it back on the main queue as the last resort.
+        logger.error({ eventId: envelope.eventId, err: (sendErr as Error).message }, 'Could not schedule a retry; requeued');
+        ch.nack(msg, false, true);
+      });
     }
   }
 
@@ -117,16 +170,21 @@ export function startCreditConsumer(options: { pool: pg.Pool; amqpUrl: string; l
         if (!stopped) logger.warn('Credit consumer connection closed; reconnecting');
         retryLater();
       });
-      const ch = await connection.createChannel();
+      const ch = await connection.createConfirmChannel();
       await ch.prefetch(1);
       await ch.assertExchange(EXCHANGES.credit, 'topic', { durable: true });
       await ch.assertQueue(QUEUE, { durable: true });
+      await ch.assertQueue(RETRY_QUEUE, {
+        durable: true,
+        arguments: { 'x-dead-letter-exchange': '', 'x-dead-letter-routing-key': QUEUE },
+      });
+      await ch.assertQueue(DEAD_LETTER_QUEUE, { durable: true });
       for (const key of ROUTING_KEYS) await ch.bindQueue(QUEUE, EXCHANGES.credit, key);
       await ch.consume(QUEUE, (msg) => {
         if (msg) void onMessage(ch, msg);
       });
       channel = ch;
-      logger.info({ queue: QUEUE, routingKeys: ROUTING_KEYS }, 'Credit consumer connected');
+      logger.info({ queue: QUEUE, routingKeys: ROUTING_KEYS, retryQueue: RETRY_QUEUE, deadLetterQueue: DEAD_LETTER_QUEUE }, 'Credit consumer connected');
     } catch (err) {
       logger.warn({ err: (err as Error).message }, 'Credit consumer could not connect; retrying in 5s');
       connection = null;
@@ -137,6 +195,11 @@ export function startCreditConsumer(options: { pool: pg.Pool; amqpUrl: string; l
   void setup();
 
   return {
+    isConnected: () => channel !== null,
+    async dlqDepth() {
+      if (!channel) return null;
+      return (await channel.checkQueue(DEAD_LETTER_QUEUE)).messageCount;
+    },
     async stop() {
       stopped = true;
       await channel?.close().catch(() => undefined);

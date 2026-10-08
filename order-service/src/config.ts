@@ -18,6 +18,7 @@ const EnvSchema = z.object({
   AUTO_CONFIRM_AFTER_HOURS: z.coerce.number().positive().default(24),
   HTTP_TIMEOUT_MS: z.coerce.number().int().positive().default(3_000),
   PENDING_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(120),
+  CONSUMER_RETRY_DELAY_MS: z.coerce.number().int().positive().default(5_000),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -46,5 +47,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     autoConfirmAfterHours: e.AUTO_CONFIRM_AFTER_HOURS,
     httpTimeoutMs: e.HTTP_TIMEOUT_MS,
     pendingTimeoutSeconds: e.PENDING_TIMEOUT_SECONDS,
+    consumerRetryDelayMs: e.CONSUMER_RETRY_DELAY_MS,
   };
 }

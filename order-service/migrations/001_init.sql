@@ -76,6 +76,8 @@ CREATE TABLE outbox_events (
   last_error     text NULL
 );
 CREATE INDEX outbox_events_unpublished_idx ON outbox_events (created_at) WHERE published_at IS NULL;
+-- For the publish-lag numbers in /metrics.
+CREATE INDEX outbox_events_published_idx ON outbox_events (published_at) WHERE published_at IS NOT NULL;
 
 -- Consumed RabbitMQ events, so a redelivered message is applied only once.
 CREATE TABLE processed_events (
