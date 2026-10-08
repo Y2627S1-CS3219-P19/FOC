@@ -33,8 +33,9 @@ Local rules for coding agents. The root `AGENTS.md` applies too.
 
 ## Files
 
-- Stay inside `order-service/`. Changes needed elsewhere (compose, nginx, root package.json, `.env.example`) go in
-  `snippets/` and the PR description.
+- Stay inside `order-service/` unless the change is wiring: `compose.yaml` (`orders-db`, `order-service`),
+  `frontend/nginx.conf` (`/v1/orders`), root `.env.example` (`ORDERS_DB_PASSWORD`), root `package.json` workspaces.
+  Every service Dockerfile copies `order-service/package.json`; keep that line if you touch them.
 - `mocks/` is temporary; delete it when Credit Service replies to `order.created` itself.
 
 ## Before you hand off
@@ -42,5 +43,5 @@ Local rules for coding agents. The root `AGENTS.md` applies too.
 ```bash
 npx tsc -p tsconfig.json --noEmit
 npx vitest run                     # needs Postgres on :5436 (see README)
-npm run lint && npm run format:check   # once ESLint/Prettier are installed
+npm run lint && npm run format:check
 ```

@@ -1,8 +1,5 @@
-# Build context is the repo root (see snippets/compose.order.yaml) so the shared packages can be included.
+# Build context is the repo root (see compose.yaml) so the shared packages can be included.
 # Same pattern as credit-service/Dockerfile.
-#
-# order-service is not in the root npm workspaces yet (see snippets/workspace.md). Until it is, its
-# dependencies (express, pg, amqplib, pino, zod) come from the root lockfile through the other services.
 FROM node:22.16.0-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -11,12 +8,12 @@ COPY packages/shared-events/package.json packages/shared-events/
 COPY user-service/package.json user-service/
 COPY supplier-service/package.json supplier-service/
 COPY credit-service/package.json credit-service/
+COPY order-service/package.json order-service/
 COPY frontend/package.json frontend/
 RUN npm ci --no-audit --no-fund
 COPY packages packages
 COPY order-service order-service
-RUN npm run build -w @foc/shared-middleware -w @foc/shared-events \
- && ./node_modules/.bin/tsc -p order-service/tsconfig.json \
+RUN npm run build -w @foc/shared-middleware -w @foc/shared-events -w order-service \
  && npm prune --omit=dev --no-audit --no-fund
 
 FROM node:22.16.0-alpine

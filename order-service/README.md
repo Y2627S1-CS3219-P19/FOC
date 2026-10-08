@@ -128,9 +128,9 @@ runs without RabbitMQ: events stay in the outbox and credit replies are not cons
 
 ## How to run
 
-**With the whole stack.** Paste the snippets first (see [snippets/workspace.md](snippets/workspace.md)):
-`compose.order.yaml` into `compose.yaml`, `nginx.order.conf` into `frontend/nginx.conf`, `env.order.example` into
-`.env.example` and your `.env`. Then from the repo root:
+**With the whole stack.** Order Service is in the root `compose.yaml` (`orders-db` on host port 5436, `order-service`
+with no host port) and routed by `frontend/nginx.conf` (`/v1/orders`). Add `ORDERS_DB_PASSWORD` to your `.env`
+(see the root `.env.example`), then from the repo root:
 
 ```bash
 docker compose up -d --build
@@ -142,9 +142,11 @@ Migrations run when the service starts. Postman collection and demo script: [pos
 **Tests.** Only Postgres is needed (any Postgres 16; the tests create and drop an `orders_test` database):
 
 ```bash
+# Either the stack's orders-db (port 5436):
+ORDERS_TEST_ADMIN_URL=postgres://orders:<ORDERS_DB_PASSWORD>@localhost:5436/postgres npm test
+# or a throwaway Postgres on 5436 when the stack is down (the default URL):
 docker run -d --name orders-sql-test -e POSTGRES_PASSWORD=test -p 5436:5432 postgres:16-alpine
-cd order-service && npx vitest run
-# with the stack's orders-db instead: ORDERS_TEST_ADMIN_URL=postgres://orders:<password>@localhost:5436/postgres
+npm test
 ```
 
 The RabbitMQ tests are skipped unless `ORDERS_TEST_AMQP_URL` is set:
@@ -154,8 +156,7 @@ ORDERS_TEST_AMQP_URL=amqp://<user>:<password>@localhost:5672 npx vitest run test
 ```
 
 **Scripts:** `build`, `start`, `dev`, `typecheck`, `test`, `lint`, `format`, `format:check`, `seed`,
-`docs:transitions`, `mock:credit`. `lint` and `format:check` need ESLint and Prettier installed, which happens once
-`order-service` is in the root workspaces (`snippets/workspace.md`, step 3).
+`docs:transitions`, `mock:credit`. Run `npm install` at the repo root first (order-service is a workspace).
 
 ## Folder layout
 
@@ -172,6 +173,5 @@ src/
   seed.ts        demo data
 migrations/      SQL, applied at startup
 mocks/           temporary Credit Service stand-in
-snippets/        wiring to paste into files outside order-service/
 postman/         collection and demo script
 ```

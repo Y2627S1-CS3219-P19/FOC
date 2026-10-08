@@ -19,8 +19,8 @@
     "seed": "tsx src/seed.ts"
   },
   "dependencies": {
-    "@foc/shared-events": "file:../packages/shared-events",
-    "@foc/shared-middleware": "file:../packages/shared-middleware",
+    "@foc/shared-events": "*",
+    "@foc/shared-middleware": "*",
     "amqplib": "^0.10.8",
     "express": "^5.1.0",
     "pg": "^8.16.3",

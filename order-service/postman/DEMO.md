@@ -4,8 +4,7 @@ About 10 minutes. One happy path and two failure cases, using `order-service.pos
 
 ## Before the demo
 
-1. The snippets in `order-service/snippets/` are pasted (compose, nginx, env), and the stack is up:
-   `docker compose up -d --build`.
+1. `ORDERS_DB_PASSWORD` is in your `.env` (see `.env.example`), and the stack is up: `docker compose up -d --build`.
 2. Three users exist in Keycloak with verified emails (requester, runner, second runner), plus an admin. Put their
    usernames and passwords in the collection variables.
 3. Credit Service does not reserve credits yet, so run the temporary mock against the stack's RabbitMQ (in a terminal
