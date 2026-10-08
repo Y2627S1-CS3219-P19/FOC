@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const walletHistoryQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  type: z.enum(['ISSUANCE', 'RESERVE', 'SETTLE_DEBIT', 'SETTLE_CREDIT', 'RELEASE']).optional(),
+  type: z.enum(['ISSUANCE', 'RESERVE', 'SETTLE_DEBIT', 'SETTLE_CREDIT', 'RELEASE', 'ADJUSTMENT']).optional(),
 });
 
 export const reservationsQuery = z.object({
@@ -24,7 +24,7 @@ export const reserveBody = z.object({
 
 export const adjustmentBody = z.object({
   userId: z.string().uuid(),
-  amount: z.coerce.number().int(),
+  amount: z.coerce.number().int().refine((n) => n !== 0, { message: 'Amount must not be zero' }),
   reason: z.string().min(1),
 }).strict();
 

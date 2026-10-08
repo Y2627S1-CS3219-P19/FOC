@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import amqp, { type ChannelModel, type Channel } from 'amqplib';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import {
   EXCHANGES,
-  CREDIT_EVENTS,
   type EventEnvelope,
   type UserRegisteredPayload,
   type OrderCreatedPayload,
@@ -12,8 +11,15 @@ import {
   type OrderWithdrawnPayload,
   type OrderCancelledPayload,
   type OrderExpiredPayload,
-  addOutboxEvent,
 } from '@foc/shared-events';
+import { handleUserRegistered } from './handlers/user.js';
+import {
+  handleOrderCreated,
+  handleOrderCompleted,
+  handleOrderWithdrawn,
+  handleOrderCancelled,
+  handleOrderExpired,
+} from './handlers/order.js';
 
 export interface ConsumerOptions {
   pool: Pool;
@@ -140,75 +146,6 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
     } finally {
       client.release();
     }
-  }
-
-  // ── Event handlers ──
-
-  async function handleUserRegistered(
-    client: PoolClient,
-    envelope: EventEnvelope<UserRegisteredPayload>,
-    balance: number,
-    log: Logger,
-  ): Promise<void> {
-    const { userId } = envelope.payload;
-
-    // Create wallet with initial balance.
-    await client.query(
-      'INSERT INTO wallets (user_id, available_balance, reserved_balance) VALUES ($1, $2, 0) ON CONFLICT (user_id) DO NOTHING',
-      [userId, balance],
-    );
-
-    // Record issuance in ledger.
-    await client.query(
-      `INSERT INTO ledger (id, user_id, reservation_id, type, amount, balance_after)
-       VALUES ($1, $2, NULL, 'ISSUANCE', $3, $3)`,
-      [randomUUID(), userId, balance],
-    );
-
-    // Publish CreditWalletCreated event via outbox.
-    await addOutboxEvent(client, CREDIT_EVENTS.walletCreated, { userId, initialBalance: balance }, envelope.correlationId);
-
-    log.info({ userId, balance }, 'Wallet created for new user');
-  }
-
-  async function handleOrderCreated(
-    _client: PoolClient,
-    envelope: EventEnvelope<OrderCreatedPayload>,
-    log: Logger,
-  ): Promise<void> {
-    log.info({ orderId: envelope.payload.orderId }, 'OrderCreated received (stub — no credit reservation yet)');
-  }
-
-  async function handleOrderCompleted(
-    _client: PoolClient,
-    envelope: EventEnvelope<OrderCompletedPayload>,
-    log: Logger,
-  ): Promise<void> {
-    log.info({ orderId: envelope.payload.orderId }, 'OrderCompleted received (stub — no credit settlement yet)');
-  }
-
-  async function handleOrderWithdrawn(
-    _client: PoolClient,
-    envelope: EventEnvelope<OrderWithdrawnPayload>,
-    log: Logger,
-  ): Promise<void> {
-    log.info({ orderId: envelope.payload.orderId }, 'OrderWithdrawn received (stub — no credit release yet)');
-  }
-
-  async function handleOrderCancelled(
-    _client: PoolClient,
-    envelope: EventEnvelope<OrderCancelledPayload>,
-    log: Logger,
-  ): Promise<void> {
-    log.info({ orderId: envelope.payload.orderId }, 'OrderCancelled received (stub — no credit release yet)');
-  }
-
-  async function handleOrderExpired(
-    _client: PoolClient,
-    envelope: EventEnvelope<OrderExpiredPayload>,
-    log: Logger,
-  ): Promise<void> {
-    log.info({ orderId: envelope.payload.orderId }, 'OrderExpired received (stub — no credit release yet)');
   }
 
   // ── Lifecycle ──
