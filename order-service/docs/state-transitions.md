@@ -3,7 +3,9 @@
 
 | Action | From | To | Who | Extra conditions | Extra changes | Credit effect | Event | Trigger |
 |---|---|---|---|---|---|---|---|---|
-| create | - | OPEN | any logged-in user (becomes the requester) | - | - | reserve (sync, before insert) | `order.created` | POST /v1/orders |
+| create | - | PENDING | any logged-in user (becomes the requester) | - | - | reserve (async: Credit consumes order.created) | `order.created` | POST /v1/orders |
+| open | PENDING | OPEN | system | - | - | reserved by Credit | `order.opened` | credit.reserved event |
+| reject | PENDING | REJECTED | system | - | - | none (Credit returns any late hold) | `order.rejected` | credit.reservation_failed event, or pending job after PENDING_TIMEOUT_SECONDS |
 | accept | OPEN | ACCEPTED | nonRequester | `expires_at > now()` | `runner_id = $2` | none | `order.accepted` | POST /v1/orders/:id/accept |
 | withdraw | ACCEPTED | OPEN | runner | - | `runner_id = NULL` | none | `order.reopened` | POST /v1/orders/:id/withdraw |
 | collect | ACCEPTED | COLLECTED | runner | - | - | none | `order.collected` | POST /v1/orders/:id/collect |

@@ -1,4 +1,3 @@
-// AI-assisted: Claude Code (Opus 5.5), 2026-10-08. Scope: the order state machine (single source of truth). Reviewed by <name>.
 import {
   ORDER_EVENTS,
   type EventDefinition,
@@ -7,7 +6,13 @@ import {
   type OrderCreatedPayload,
   type OrderExpiredPayload,
 } from '@foc/shared-events';
-import { LOCAL_ORDER_EVENTS, type OrderReopenedPayload, type OrderRunnerPayload } from '../events/localEvents.js';
+import {
+  LOCAL_ORDER_EVENTS,
+  type OrderOpenedPayload,
+  type OrderRejectedPayload,
+  type OrderReopenedPayload,
+  type OrderRunnerPayload,
+} from '../events/localEvents.js';
 import type { OrderRow, OrderStatus } from './order.js';
 
 /**
@@ -20,9 +25,15 @@ import type { OrderRow, OrderStatus } from './order.js';
 export type Actor = 'requester' | 'runner' | 'nonRequester' | 'system';
 
 /** Credit effect, using CREDIT_EVENTS words: returned = back to requester, released = paid to runner. */
-export type CreditEffect = 'none' | 'reserve (sync, before insert)' | 'return to requester' | 'release to runner';
+export type CreditEffect =
+  | 'none'
+  | 'reserve (async: Credit consumes order.created)'
+  | 'reserved by Credit'
+  | 'none (Credit returns any late hold)'
+  | 'return to requester'
+  | 'release to runner';
 
-export type Action = 'accept' | 'withdraw' | 'collect' | 'deliver' | 'confirm' | 'cancel' | 'expire';
+export type Action = 'open' | 'reject' | 'accept' | 'withdraw' | 'collect' | 'deliver' | 'confirm' | 'cancel' | 'expire';
 
 type Versioned<T> = T & { orderVersion: number };
 
@@ -38,7 +49,7 @@ export interface Transition {
   trigger: string;
   event: EventDefinition<object>;
   /** `order` is the row AFTER the update. `actorId` is null for the system. */
-  payload: (order: OrderRow, actorId: string | null) => object;
+  payload: (order: OrderRow, actorId: string | null, reason: string | null) => object;
 }
 
 const versioned = <T>(order: OrderRow, payload: T): Versioned<T> => ({ ...payload, orderVersion: order.version });
@@ -48,6 +59,29 @@ const runnerPayload = (o: OrderRow) =>
   versioned<OrderRunnerPayload>(o, { orderId: o.id, requesterId: o.requester_id, runnerId: o.runner_id! });
 
 export const TRANSITIONS: Record<Action, Transition> = {
+  open: {
+    from: 'PENDING',
+    to: 'OPEN',
+    actors: ['system'],
+    where: [],
+    set: [],
+    credit: 'reserved by Credit',
+    trigger: 'credit.reserved event',
+    event: LOCAL_ORDER_EVENTS.opened,
+    payload: (o) => versioned<OrderOpenedPayload>(o, { orderId: o.id, requesterId: o.requester_id }),
+  },
+  reject: {
+    from: 'PENDING',
+    to: 'REJECTED',
+    actors: ['system'],
+    where: [],
+    set: [],
+    credit: 'none (Credit returns any late hold)',
+    trigger: 'credit.reservation_failed event, or pending job after PENDING_TIMEOUT_SECONDS',
+    event: LOCAL_ORDER_EVENTS.rejected,
+    payload: (o, _actorId, reason) =>
+      versioned<OrderRejectedPayload>(o, { orderId: o.id, requesterId: o.requester_id, reason: reason ?? 'UNKNOWN' }),
+  },
   accept: {
     from: 'OPEN',
     to: 'ACCEPTED',
@@ -136,9 +170,9 @@ export const TRANSITIONS: Record<Action, Transition> = {
 
 /** Order creation is an INSERT, not an UPDATE, so it is kept apart from TRANSITIONS. */
 export const CREATE = {
-  to: 'OPEN' as const,
+  to: 'PENDING' as const,
   actors: ['any logged-in user (becomes the requester)'],
-  credit: 'reserve (sync, before insert)' as CreditEffect,
+  credit: 'reserve (async: Credit consumes order.created)' as CreditEffect,
   trigger: 'POST /v1/orders',
   event: ORDER_EVENTS.created,
   payload: (o: OrderRow) =>

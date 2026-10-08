@@ -1,4 +1,3 @@
--- AI-assisted: Claude Code (Opus 5.5), 2026-10-08. Scope: Order Service schema. Reviewed by <name>.
 -- Order Service schema (orders_db). Lines marked DESIGN are choices to confirm.
 
 CREATE TABLE orders (
@@ -18,11 +17,16 @@ CREATE TABLE orders (
   -- DESIGN: items as a JSON array of plain text descriptions, e.g. ["1x chicken rice", "1x kopi"].
   items                          jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array' AND jsonb_array_length(items) > 0),
   credit_amount                  integer NOT NULL CHECK (credit_amount > 0),
-  status                         text NOT NULL DEFAULT 'OPEN'
-                                 CHECK (status IN ('OPEN', 'ACCEPTED', 'COLLECTED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'EXPIRED')),
+  -- DESIGN: starts PENDING until Credit Service answers order.created with credit.reserved or credit.reservation_failed.
+  status                         text NOT NULL DEFAULT 'PENDING'
+                                 CHECK (status IN ('PENDING', 'REJECTED', 'OPEN', 'ACCEPTED', 'COLLECTED', 'DELIVERED',
+                                                   'COMPLETED', 'CANCELLED', 'EXPIRED')),
   expires_at                     timestamptz NOT NULL,
   -- DESIGN: own column so auto-confirm does not depend on updated_at.
   delivered_at                   timestamptz NULL,
+  -- Set only when REJECTED: INSUFFICIENT_CREDITS, NO_WALLET or CREDIT_TIMEOUT, plus the balance Credit reported.
+  rejection_reason               text NULL,
+  rejection_balance              integer NULL,
   created_at                     timestamptz NOT NULL DEFAULT now(),
   updated_at                     timestamptz NOT NULL DEFAULT now(),
   -- +1 on every transition. Sent in events as orderVersion.
@@ -46,6 +50,7 @@ CREATE INDEX orders_facility_type_idx ON orders (lower(supplier_facility_type));
 CREATE INDEX orders_requester_idx ON orders (requester_id, created_at DESC);
 CREATE INDEX orders_runner_idx ON orders (runner_id, created_at DESC) WHERE runner_id IS NOT NULL;
 CREATE INDEX orders_delivered_idx ON orders (delivered_at) WHERE status = 'DELIVERED';
+CREATE INDEX orders_pending_idx ON orders (created_at) WHERE status = 'PENDING';
 
 CREATE TABLE order_status_history (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,3 +76,10 @@ CREATE TABLE outbox_events (
   last_error     text NULL
 );
 CREATE INDEX outbox_events_unpublished_idx ON outbox_events (created_at) WHERE published_at IS NULL;
+
+-- Consumed RabbitMQ events, so a redelivered message is applied only once.
+CREATE TABLE processed_events (
+  event_id      text PRIMARY KEY,
+  event_type    text NOT NULL,
+  processed_at  timestamptz NOT NULL DEFAULT now()
+);

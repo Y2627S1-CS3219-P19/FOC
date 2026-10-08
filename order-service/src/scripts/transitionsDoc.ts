@@ -1,4 +1,3 @@
-// AI-assisted: Claude Code (Opus 5.5), 2026-10-08. Scope: generates docs/state-transitions.md. Reviewed by <name>.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CREATE, TRANSITIONS, type Action } from '../domain/transitions.js';
@@ -23,8 +22,8 @@ export function renderTransitionsDoc(): string {
     ...rows,
     '',
     'Who:',
-    '- requester: the caller is the order\'s requester',
-    '- runner: the caller is the order\'s assigned runner',
+    "- requester: the caller is the order's requester",
+    "- runner: the caller is the order's assigned runner",
     '- nonRequester: any logged-in user except the requester',
     '- system: a background job',
     '',

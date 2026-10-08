@@ -1,9 +1,10 @@
-// AI-assisted: Claude Code (Opus 5.5), 2026-10-08. Scope: unit tests for the transition table. Reviewed by <name>.
 import { describe, expect, it } from 'vitest';
 import { ORDER_STATUSES, type OrderRow, type OrderStatus } from '../src/domain/order.js';
 import { TRANSITIONS, isAllowedFrom, updateSql, type Action } from '../src/domain/transitions.js';
 
 const LEGAL: Array<[Action, OrderStatus, OrderStatus]> = [
+  ['open', 'PENDING', 'OPEN'],
+  ['reject', 'PENDING', 'REJECTED'],
   ['accept', 'OPEN', 'ACCEPTED'],
   ['withdraw', 'ACCEPTED', 'OPEN'],
   ['collect', 'ACCEPTED', 'COLLECTED'],
@@ -30,7 +31,7 @@ describe('transition table', () => {
   });
 
   it('final states have no way out', () => {
-    for (const status of ['COMPLETED', 'CANCELLED', 'EXPIRED'] as const) {
+    for (const status of ['REJECTED', 'COMPLETED', 'CANCELLED', 'EXPIRED'] as const) {
       expect(LEGAL.some(([, from]) => from === status)).toBe(false);
     }
   });
@@ -38,6 +39,8 @@ describe('transition table', () => {
 
 describe('who may trigger each transition', () => {
   it('matches the rules', () => {
+    expect(TRANSITIONS.open.actors).toEqual(['system']);
+    expect(TRANSITIONS.reject.actors).toEqual(['system']);
     expect(TRANSITIONS.accept.actors).toEqual(['nonRequester']);
     expect(TRANSITIONS.withdraw.actors).toEqual(['runner']);
     expect(TRANSITIONS.collect.actors).toEqual(['runner']);
@@ -51,6 +54,7 @@ describe('who may trigger each transition', () => {
     expect(() => updateSql('accept', 'requester')).toThrow();
     expect(() => updateSql('cancel', 'runner')).toThrow();
     expect(() => updateSql('expire', 'requester')).toThrow();
+    expect(() => updateSql('open', 'requester')).toThrow();
   });
 });
 
@@ -99,13 +103,15 @@ describe('event payloads', () => {
     status: 'COMPLETED',
     expires_at: new Date(),
     delivered_at: new Date(),
+    rejection_reason: null,
+    rejection_balance: null,
     created_at: new Date(),
     updated_at: new Date(),
     version: 6,
   };
 
   it('completed carries what Credit needs to pay the runner, plus orderVersion', () => {
-    expect(TRANSITIONS.confirm.payload(order, null)).toEqual({
+    expect(TRANSITIONS.confirm.payload(order, null, null)).toEqual({
       orderId: 'o1',
       requesterId: 'req',
       runnerId: 'run',
@@ -113,6 +119,16 @@ describe('event payloads', () => {
       orderVersion: 6,
     });
     expect(TRANSITIONS.confirm.event.routingKey).toBe('order.completed');
+  });
+
+  it('reject carries the reason so Credit can give back any late hold', () => {
+    expect(TRANSITIONS.reject.payload(order, null, 'CREDIT_TIMEOUT')).toEqual({
+      orderId: 'o1',
+      requesterId: 'req',
+      reason: 'CREDIT_TIMEOUT',
+      orderVersion: 6,
+    });
+    expect(TRANSITIONS.reject.event.routingKey).toBe('order.rejected');
   });
 
   it('runner withdraw never publishes order.withdrawn', () => {

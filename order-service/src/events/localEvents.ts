@@ -1,4 +1,3 @@
-// AI-assisted: Claude Code (Opus 5.5), 2026-10-08. Scope: order events missing from shared-events. Reviewed by <name>.
 import { EXCHANGES, type EventDefinition } from '@foc/shared-events';
 
 // TODO(team): move these into packages/shared-events once agreed.
@@ -14,17 +13,43 @@ export interface OrderReopenedPayload {
   requesterId: string;
   previousRunnerId: string;
 }
+export interface OrderOpenedPayload {
+  orderId: string;
+  requesterId: string;
+}
+export interface OrderRejectedPayload {
+  orderId: string;
+  requesterId: string;
+  reason: string;
+}
 
-const local = <T>(type: string, routingKey: string): EventDefinition<T> => ({
+const define = <T>(type: string, exchange: string, routingKey: string): EventDefinition<T> => ({
   type,
-  exchange: EXCHANGES.order,
+  exchange,
   routingKey,
   version: 1,
 });
 
 export const LOCAL_ORDER_EVENTS = {
-  accepted: local<OrderRunnerPayload>('OrderAccepted', 'order.accepted'),
-  collected: local<OrderRunnerPayload>('OrderCollected', 'order.collected'),
-  delivered: local<OrderRunnerPayload>('OrderDelivered', 'order.delivered'),
-  reopened: local<OrderReopenedPayload>('OrderReopened', 'order.reopened'),
+  opened: define<OrderOpenedPayload>('OrderOpened', EXCHANGES.order, 'order.opened'),
+  rejected: define<OrderRejectedPayload>('OrderRejected', EXCHANGES.order, 'order.rejected'),
+  accepted: define<OrderRunnerPayload>('OrderAccepted', EXCHANGES.order, 'order.accepted'),
+  collected: define<OrderRunnerPayload>('OrderCollected', EXCHANGES.order, 'order.collected'),
+  delivered: define<OrderRunnerPayload>('OrderDelivered', EXCHANGES.order, 'order.delivered'),
+  reopened: define<OrderReopenedPayload>('OrderReopened', EXCHANGES.order, 'order.reopened'),
 } as const;
+
+// TODO(credit owner): the failure reply Order Service expects from Credit Service. Add it to CREDIT_EVENTS.
+export interface CreditReservationFailedPayload {
+  orderId: string;
+  requesterId: string;
+  amount: number;
+  availableBalance: number | null;
+  reason: 'INSUFFICIENT_CREDITS' | 'NO_WALLET';
+}
+
+export const CREDIT_RESERVATION_FAILED = define<CreditReservationFailedPayload>(
+  'CreditReservationFailed',
+  EXCHANGES.credit,
+  'credit.reservation_failed',
+);

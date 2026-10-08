@@ -11,7 +11,8 @@
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "docs:transitions": "tsx src/scripts/transitionsDoc.ts"
+    "docs:transitions": "tsx src/scripts/transitionsDoc.ts",
+    "mock:credit": "tsx mocks/credit-mock.ts"
   },
   "dependencies": {
     "@foc/shared-events": "file:../packages/shared-events",
