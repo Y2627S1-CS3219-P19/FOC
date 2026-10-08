@@ -4,7 +4,7 @@ import { useApi } from '../api';
 import { ErrorBox, FieldError } from '../components';
 import type { Supplier } from '../types';
 
-const EMPTY = { name: '', facilityType: '', building: '', floor: '', locationDescription: '', opensAt: '09:00', closesAt: '18:00', tags: '' };
+const EMPTY = { name: '', facilityType: '', building: '', floor: '', locationDescription: '', opensAt: '09:00', closesAt: '18:00' };
 
 /** Create (no id) or edit (with id). Admin only - the server enforces this with 403 too. */
 export function SupplierFormPage() {
@@ -28,7 +28,6 @@ export function SupplierFormPage() {
         locationDescription: s.locationDescription,
         opensAt: s.opensAt,
         closesAt: s.closesAt,
-        tags: s.tags.join(', '),
       }),
       setError,
     );
@@ -43,7 +42,6 @@ export function SupplierFormPage() {
     const body = {
       ...form,
       floor: form.floor || null,
-      tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean),
     };
     try {
       const { data } = id
@@ -106,11 +104,6 @@ export function SupplierFormPage() {
           <FieldError error={error} field="closesAt" />
         </label>
       </div>
-      <label>
-        Tags (comma-separated)
-        <input value={form.tags} onChange={set('tags')} placeholder="coffee, snacks" />
-        <FieldError error={error} field="tags" />
-      </label>
       <button className="primary" disabled={busy}>
         {busy ? 'Saving...' : 'Save'}
       </button>

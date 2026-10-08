@@ -1,41 +1,52 @@
-import { readFileSync } from 'node:fs';
-import express from 'express';
-import swaggerUi from 'swagger-ui-express';
-import { parse as parseYaml } from 'yaml';
-import { correlationId, errorHandler, httpLogger, notFoundHandler } from '@foc/shared-middleware';
-import type { AppContext } from './context.js';
-import { internalRouter } from './routes/internal.js';
-import { suppliersRouter } from './routes/suppliers.js';
+import path from 'node:path';
+import Fastify, { type FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
+import { healthRoutes } from './routes/health.js';
+import { imageRoutes } from './routes/images.js';
+import { supplierRoutes } from './routes/suppliers.js';
+import { errorHandler } from './middleware/errors.js';
+import authPlugin, { type AuthPluginOptions } from './middleware/auth.js';
+import { InMemorySupplierRepository, type SupplierRepository } from './db/repository.js';
 
-const openapi = parseYaml(readFileSync(new URL('../openapi.yaml', import.meta.url), 'utf8')) as object;
+export interface AppOptions {
+  dbReady?: boolean;
+  imagesDir?: string;
+  authConfig?: AuthPluginOptions;
+  repository?: SupplierRepository;
+}
 
-export function createApp(ctx: AppContext) {
-  const app = express();
-  app.disable('x-powered-by');
-  app.use(correlationId);
-  app.use(httpLogger(ctx.logger));
-  app.use(express.json({ limit: '100kb' }));
-
-  app.get('/health/live', (_req, res) => {
-    res.json({ status: 'UP' });
-  });
-  app.get('/health/ready', async (_req, res) => {
-    const db = await ctx.pool.query('SELECT 1').then(() => true, () => false);
-    res.status(db ? 200 : 503).json({ status: db ? 'UP' : 'DOWN', checks: { db } });
+export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: false,
   });
 
-  app.use('/v1/docs', swaggerUi.serve, swaggerUi.setup(openapi, { customSiteTitle: 'FoC Supplier Service API' }));
-  app.get('/v1/openapi.json', (_req, res) => {
-    res.json(openapi);
+  app.setErrorHandler(errorHandler);
+  await app.register(cors);
+
+  // Correlation ID hook: pass through or generate
+  app.addHook('onRequest', async (req, reply) => {
+    const correlationId = (req.headers['x-correlation-id'] as string) || crypto.randomUUID();
+    reply.header('x-correlation-id', correlationId);
   });
 
-  // Supplier photos are public: <img> tags cannot send a Bearer token, and the images are not sensitive.
-  app.use('/v1/supplier-images', express.static(ctx.config.imagesDir, { maxAge: '1h', fallthrough: false }));
+  // Register authentication plugin
+  await app.register(authPlugin, opts.authConfig ?? {});
 
-  app.use('/v1/suppliers', suppliersRouter(ctx));
-  app.use('/v1/internal', internalRouter(ctx));
+  // Register health routes
+  await app.register(healthRoutes, {
+    checkDbReady: () => opts.dbReady ?? true,
+  });
 
-  app.use(notFoundHandler);
-  app.use(errorHandler(ctx.logger));
+  // Register public images route
+  const imagesDir = opts.imagesDir ?? path.resolve(process.cwd(), '../data/images');
+  await app.register(imageRoutes, { imagesDir });
+
+  // Register supplier routes
+  const repository = opts.repository ?? new InMemorySupplierRepository();
+  await app.register(supplierRoutes, {
+    prefix: '/v1/suppliers',
+    repository,
+  });
+
   return app;
 }

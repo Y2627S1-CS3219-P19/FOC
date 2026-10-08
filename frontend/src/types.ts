@@ -49,10 +49,8 @@ export interface Supplier {
   isActive: boolean;
   isOpenNow: boolean;
   imageUrl: string | null;
-  tags: string[];
 }
 
 export type SupplierInput = Pick<Supplier, 'name' | 'facilityType' | 'building' | 'locationDescription' | 'opensAt' | 'closesAt'> & {
   floor: string | null;
-  tags: string[];
 };
