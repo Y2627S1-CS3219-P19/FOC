@@ -41,15 +41,24 @@ describe('POST /v1/orders', () => {
   });
 
   it('422 with field errors for bad input', async () => {
-    const res = await request(api).post('/v1/orders').set(as(REQ)).send(body({ items: [], creditAmount: 0, extra: 1 }));
+    const res = await request(api)
+      .post('/v1/orders')
+      .set(as(REQ))
+      .send(body({ items: [], creditAmount: 0, extra: 1 }));
     expect(res.status).toBe(422);
     expect(Object.keys(res.body.error.details.fieldErrors).sort()).toEqual(['creditAmount', 'extra', 'items']);
   });
 
   it('400 when expiry is in the past or more than 24h away', async () => {
-    const past = await request(api).post('/v1/orders').set(as(REQ)).send(body({ expiresAt: inHours(-1) }));
+    const past = await request(api)
+      .post('/v1/orders')
+      .set(as(REQ))
+      .send(body({ expiresAt: inHours(-1) }));
     expect(past.body.error.code).toBe('EXPIRY_NOT_IN_FUTURE');
-    const far = await request(api).post('/v1/orders').set(as(REQ)).send(body({ expiresAt: inHours(25) }));
+    const far = await request(api)
+      .post('/v1/orders')
+      .set(as(REQ))
+      .send(body({ expiresAt: inHours(25) }));
     expect(far.status).toBe(400);
     expect(far.body.error.code).toBe('EXPIRY_TOO_FAR');
   });
@@ -80,7 +89,10 @@ describe('POST /v1/orders', () => {
       version: 1,
     });
     const id = res.body.data.id;
-    const history = await ctx.pool.query('SELECT from_status, to_status, actor_id FROM order_status_history WHERE order_id = $1', [id]);
+    const history = await ctx.pool.query(
+      'SELECT from_status, to_status, actor_id FROM order_status_history WHERE order_id = $1',
+      [id],
+    );
     expect(history.rows).toEqual([{ from_status: null, to_status: 'PENDING', actor_id: REQ }]);
     const outbox = await ctx.pool.query('SELECT routing_key, envelope FROM outbox_events');
     expect(outbox.rows).toHaveLength(1);
@@ -108,9 +120,22 @@ describe('GET /v1/orders (open listing)', () => {
   });
 
   it('filters by building, facility type, delivery location, credit and remaining time', async () => {
-    const a = await insertOrder(ctx, { requesterId: OTHER, building: 'Central Library', facilityType: 'Shopping', creditAmount: 3, expiresInMinutes: 30 });
-    const b = await insertOrder(ctx, { requesterId: OTHER, building: 'Com2', deliveryLocation: 'UTown Residence', creditAmount: 8, expiresInMinutes: 300 });
-    const ids = async (qs: string) => (await request(api).get(`/v1/orders?${qs}`).set(as(REQ))).body.data.map((o: { id: string }) => o.id);
+    const a = await insertOrder(ctx, {
+      requesterId: OTHER,
+      building: 'Central Library',
+      facilityType: 'Shopping',
+      creditAmount: 3,
+      expiresInMinutes: 30,
+    });
+    const b = await insertOrder(ctx, {
+      requesterId: OTHER,
+      building: 'Com2',
+      deliveryLocation: 'UTown Residence',
+      creditAmount: 8,
+      expiresInMinutes: 300,
+    });
+    const ids = async (qs: string) =>
+      (await request(api).get(`/v1/orders?${qs}`).set(as(REQ))).body.data.map((o: { id: string }) => o.id);
     expect(await ids('building=central%20library')).toEqual([a]);
     expect(await ids('facilityType=shopping')).toEqual([a]);
     expect(await ids('deliveryLocation=utown')).toEqual([b]);
@@ -140,7 +165,8 @@ describe('GET /v1/orders/mine', () => {
     const mineAsRequester = await insertOrder(ctx, { requesterId: REQ });
     const mineAsRunner = await insertOrder(ctx, { requesterId: OTHER, runnerId: REQ, status: 'ACCEPTED' });
     await insertOrder(ctx, { requesterId: OTHER });
-    const ids = async (qs: string) => (await request(api).get(`/v1/orders/mine?${qs}`).set(as(REQ))).body.data.map((o: { id: string }) => o.id);
+    const ids = async (qs: string) =>
+      (await request(api).get(`/v1/orders/mine?${qs}`).set(as(REQ))).body.data.map((o: { id: string }) => o.id);
     expect(await ids('as=requester')).toEqual([mineAsRequester]);
     expect(await ids('as=runner')).toEqual([mineAsRunner]);
     expect(await ids('as=runner&status=OPEN')).toEqual([]);
@@ -184,7 +210,11 @@ describe('GET /v1/orders/:id', () => {
     const other = await request(api).get(`/v1/orders/${id}`).set(as(OTHER));
     expect(other.status).toBe(403);
     expect(other.body.error.code).toBe('NOT_ORDER_PARTICIPANT');
-    for (const [user, roles] of [[REQ, 'user'], [RUN, 'user'], [ADMIN, 'user,admin']]) {
+    for (const [user, roles] of [
+      [REQ, 'user'],
+      [RUN, 'user'],
+      [ADMIN, 'user,admin'],
+    ]) {
       expect((await request(api).get(`/v1/orders/${id}`).set(as(user!, roles))).status).toBe(200);
     }
   });

@@ -127,11 +127,23 @@ export function startCreditConsumer(options: CreditConsumerOptions): CreditConsu
       contentType: msg.properties.contentType,
       messageId: msg.properties.messageId,
       expiration: deadLetter ? undefined : String(retryDelayMs),
-      headers: { ...headers, 'x-attempts': attempt, 'x-last-error': error.slice(0, 500), 'x-original-routing-key': originalRoutingKey },
+      headers: {
+        ...headers,
+        'x-attempts': attempt,
+        'x-last-error': error.slice(0, 500),
+        'x-original-routing-key': originalRoutingKey,
+      },
     });
     await ch.waitForConfirms();
     ch.ack(msg);
-    const fields = { eventId, routingKey: originalRoutingKey, attempt, maxAttempts: MAX_ATTEMPTS, err: error, correlationId: headers['x-correlation-id'] };
+    const fields = {
+      eventId,
+      routingKey: originalRoutingKey,
+      attempt,
+      maxAttempts: MAX_ATTEMPTS,
+      err: error,
+      correlationId: headers['x-correlation-id'],
+    };
     if (deadLetter) logger.error({ ...fields, queue: DEAD_LETTER_QUEUE }, 'Message dead-lettered');
     else logger.warn({ ...fields, retryInMs: retryDelayMs }, 'Retry scheduled');
   }
@@ -184,7 +196,10 @@ export function startCreditConsumer(options: CreditConsumerOptions): CreditConsu
         if (msg) void onMessage(ch, msg);
       });
       channel = ch;
-      logger.info({ queue: QUEUE, routingKeys: ROUTING_KEYS, retryQueue: RETRY_QUEUE, deadLetterQueue: DEAD_LETTER_QUEUE }, 'Credit consumer connected');
+      logger.info(
+        { queue: QUEUE, routingKeys: ROUTING_KEYS, retryQueue: RETRY_QUEUE, deadLetterQueue: DEAD_LETTER_QUEUE },
+        'Credit consumer connected',
+      );
     } catch (err) {
       logger.warn({ err: (err as Error).message }, 'Credit consumer could not connect; retrying in 5s');
       connection = null;

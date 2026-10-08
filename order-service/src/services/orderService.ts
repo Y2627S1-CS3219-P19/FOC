@@ -94,7 +94,11 @@ export function listOpen(ctx: AppContext, caller: Caller, q: ListOpenQuery) {
   if (q.minCredit !== undefined && q.maxCredit !== undefined && q.minCredit > q.maxCredit) {
     throw badRequest('INVALID_RANGE', 'minCredit cannot be more than maxCredit.');
   }
-  if (q.minRemainingMinutes !== undefined && q.maxRemainingMinutes !== undefined && q.minRemainingMinutes > q.maxRemainingMinutes) {
+  if (
+    q.minRemainingMinutes !== undefined &&
+    q.maxRemainingMinutes !== undefined &&
+    q.minRemainingMinutes > q.maxRemainingMinutes
+  ) {
     throw badRequest('INVALID_RANGE', 'minRemainingMinutes cannot be more than maxRemainingMinutes.');
   }
   return repo.listOpen(ctx.pool, caller.userId, q);

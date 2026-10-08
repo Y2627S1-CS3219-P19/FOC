@@ -25,7 +25,10 @@ export async function callInternal(
   body?: unknown,
 ): Promise<InternalResponse> {
   const unavailable = () =>
-    serviceUnavailable(`${options.service}_UNAVAILABLE`, `The ${options.service.toLowerCase()} service is not responding. Please try again.`);
+    serviceUnavailable(
+      `${options.service}_UNAVAILABLE`,
+      `The ${options.service.toLowerCase()} service is not responding. Please try again.`,
+    );
   let res: Response;
   try {
     res = await fetch(`${options.baseUrl}${path}`, {

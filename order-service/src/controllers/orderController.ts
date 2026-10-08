@@ -29,7 +29,10 @@ export function orderController(ctx: AppContext) {
       const input = parseOrThrow(createOrderSchema, req.body);
       const order = await orders.createOrder(ctx, callerOf(req), input);
       // 202: the order is PENDING until Credit Service replies.
-      res.status(202).location(`/v1/orders/${order.id}`).json({ data: toApi(order) });
+      res
+        .status(202)
+        .location(`/v1/orders/${order.id}`)
+        .json({ data: toApi(order) });
     },
 
     async listOpen(req: Request, res: Response) {

@@ -32,7 +32,13 @@ describe.skipIf(!AMQP_URL)('with a real RabbitMQ', () => {
     await ch.bindQueue(queue, EXCHANGES.order, 'order.#');
     await ch.consume(queue, (msg) => msg && received.push(msg), { noAck: true });
 
-    relay = startOutboxRelay({ pool: ctx.pool, amqpUrl: AMQP_URL!, exchanges: [EXCHANGES.order], logger: ctx.logger, pollIntervalMs: 100 });
+    relay = startOutboxRelay({
+      pool: ctx.pool,
+      amqpUrl: AMQP_URL!,
+      exchanges: [EXCHANGES.order],
+      logger: ctx.logger,
+      pollIntervalMs: 100,
+    });
     consumer = startCreditConsumer({ pool: ctx.pool, amqpUrl: AMQP_URL!, logger: ctx.logger, retryDelayMs: 100 });
     ctx.broker = consumer;
     await waitFor(() => consumer.isConnected());
@@ -54,7 +60,8 @@ describe.skipIf(!AMQP_URL)('with a real RabbitMQ', () => {
     }
   }
 
-  const orderStatus = async (id: string) => (await ctx.pool.query('SELECT status FROM orders WHERE id = $1', [id])).rows[0]?.status;
+  const orderStatus = async (id: string) =>
+    (await ctx.pool.query('SELECT status FROM orders WHERE id = $1', [id])).rows[0]?.status;
 
   it('health shows the broker as UP', async () => {
     const res = await request(createApp(ctx)).get('/health/ready');
@@ -67,7 +74,13 @@ describe.skipIf(!AMQP_URL)('with a real RabbitMQ', () => {
       .post('/v1/orders')
       .set(as(REQ))
       .set('X-Correlation-Id', 'rabbit-test-0001')
-      .send({ supplierId: supplier.id, deliveryLocation: 'COM1 lobby', items: ['1x kopi'], creditAmount: 5, expiresAt: inHours(2) });
+      .send({
+        supplierId: supplier.id,
+        deliveryLocation: 'COM1 lobby',
+        items: ['1x kopi'],
+        creditAmount: 5,
+        expiresAt: inHours(2),
+      });
     expect(res.status).toBe(202);
     const orderId = res.body.data.id;
 
@@ -88,7 +101,8 @@ describe.skipIf(!AMQP_URL)('with a real RabbitMQ', () => {
       correlationId: 'rabbit-test-0001',
       payload: { orderId, requesterId: REQ, amount: 5 },
     };
-    for (let i = 0; i < 2; i++) ch.publish(EXCHANGES.credit, CREDIT_EVENTS.reserved.routingKey, Buffer.from(JSON.stringify(reply)));
+    for (let i = 0; i < 2; i++)
+      ch.publish(EXCHANGES.credit, CREDIT_EVENTS.reserved.routingKey, Buffer.from(JSON.stringify(reply)));
 
     // 3. The consumer opens the order, and order.opened goes out once.
     await waitFor(async () => (await orderStatus(orderId)) === 'OPEN');
@@ -104,7 +118,13 @@ describe.skipIf(!AMQP_URL)('with a real RabbitMQ', () => {
     const res = await request(api)
       .post('/v1/orders')
       .set(as(REQ))
-      .send({ supplierId: supplier.id, deliveryLocation: 'COM1 lobby', items: ['1x kopi'], creditAmount: 5, expiresAt: inHours(2) });
+      .send({
+        supplierId: supplier.id,
+        deliveryLocation: 'COM1 lobby',
+        items: ['1x kopi'],
+        creditAmount: 5,
+        expiresAt: inHours(2),
+      });
     const goodOrderId = res.body.data.id;
 
     // orderId is not a uuid, so the UPDATE throws every time: a poison message.
@@ -116,7 +136,12 @@ describe.skipIf(!AMQP_URL)('with a real RabbitMQ', () => {
       correlationId: 'rabbit-poison-0001',
       payload: { orderId: 'not-a-uuid', requesterId: REQ, amount: 5 },
     };
-    const good: EventEnvelope = { ...poison, eventId: randomUUID(), correlationId: 'rabbit-good-0001', payload: { orderId: goodOrderId, requesterId: REQ, amount: 5 } };
+    const good: EventEnvelope = {
+      ...poison,
+      eventId: randomUUID(),
+      correlationId: 'rabbit-good-0001',
+      payload: { orderId: goodOrderId, requesterId: REQ, amount: 5 },
+    };
     ch.publish(EXCHANGES.credit, CREDIT_EVENTS.reserved.routingKey, Buffer.from(JSON.stringify(poison)));
     ch.publish(EXCHANGES.credit, CREDIT_EVENTS.reserved.routingKey, Buffer.from(JSON.stringify(good)));
 

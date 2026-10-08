@@ -18,8 +18,8 @@ const connection = await amqp.connect(amqpUrl);
 const ch = await connection.createConfirmChannel();
 await ch.assertExchange(EXCHANGES.order, 'topic', { durable: true });
 await ch.assertExchange(EXCHANGES.credit, 'topic', { durable: true });
-// Not durable and auto-deleted: a mock should leave nothing behind in RabbitMQ.
-const { queue } = await ch.assertQueue('credit-mock.order-created', { durable: false, autoDelete: true });
+// Exclusive: deleted when the mock stops, so it leaves nothing behind. (RabbitMQ 4 rejects non-durable shared queues.)
+const { queue } = await ch.assertQueue('', { exclusive: true });
 await ch.bindQueue(queue, EXCHANGES.order, ORDER_EVENTS.created.routingKey);
 console.log(`Credit mock listening for ${ORDER_EVENTS.created.routingKey} in "${mode}" mode`);
 
@@ -33,7 +33,10 @@ await ch.consume(queue, (msg) => {
   }
   const reply =
     mode === 'success'
-      ? { def: CREDIT_EVENTS.reserved, payload: { orderId: order.payload.orderId, requesterId: order.payload.requesterId, amount: order.payload.creditAmount } }
+      ? {
+          def: CREDIT_EVENTS.reserved,
+          payload: { orderId: order.payload.orderId, requesterId: order.payload.requesterId, amount: order.payload.creditAmount },
+        }
       : {
           def: CREDIT_RESERVATION_FAILED,
           payload: {

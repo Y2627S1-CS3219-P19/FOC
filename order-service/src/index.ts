@@ -54,7 +54,9 @@ async function main() {
         debugQueue: config.debugEventQueue ? 'debug.all-order-events' : undefined,
       })
     : null;
-  const consumer = config.amqpUrl ? startCreditConsumer({ pool, amqpUrl: config.amqpUrl, logger, retryDelayMs: config.consumerRetryDelayMs }) : null;
+  const consumer = config.amqpUrl
+    ? startCreditConsumer({ pool, amqpUrl: config.amqpUrl, logger, retryDelayMs: config.consumerRetryDelayMs })
+    : null;
   if (consumer) ctx.broker = consumer;
   else logger.warn('AMQP_URL not set: events stay in outbox_events and credit replies are not consumed');
   const sweepers = startSweepers({

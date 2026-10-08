@@ -20,7 +20,10 @@ export function healthRouter(ctx: AppContext): Router {
   // Only the DB decides readiness. With RabbitMQ down, orders still work and events wait in the outbox,
   // so the service reports DEGRADED but stays in rotation.
   router.get('/health/ready', async (_req, res) => {
-    const db = await ctx.pool.query('SELECT 1').then(() => true, () => false);
+    const db = await ctx.pool.query('SELECT 1').then(
+      () => true,
+      () => false,
+    );
     const broker = brokerState(ctx);
     const status = !db ? 'DOWN' : broker === 'DOWN' ? 'DEGRADED' : 'UP';
     res.status(db ? 200 : 503).json({ status, checks: { db, broker } });

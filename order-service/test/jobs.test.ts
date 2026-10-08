@@ -1,3 +1,4 @@
+import type { Server } from 'node:http';
 import { setTimeout as sleep } from 'node:timers/promises';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -10,13 +11,15 @@ const REQ = 'aaaaaaaa-0000-0000-0000-000000000001';
 const RUN = 'bbbbbbbb-0000-0000-0000-000000000002';
 
 let ctx: AppContext;
-let api: ReturnType<typeof createApp>;
+// One shared server: supertest would otherwise start a new server for every request.
+let api: Server;
 
 beforeAll(async () => {
   ctx = await createTestContext();
-  api = createApp(ctx);
+  api = createApp(ctx).listen(0);
 });
 afterAll(async () => {
+  api.close();
   await ctx.pool.end();
 });
 beforeEach(async () => {
@@ -63,7 +66,10 @@ describe('expiry sweeper', () => {
 describe('auto-confirm sweeper', () => {
   const delivered = async (hoursAgo: number) => {
     const id = await insertOrder(ctx, { requesterId: REQ, runnerId: RUN, status: 'DELIVERED' });
-    await ctx.pool.query(`UPDATE orders SET delivered_at = now() - make_interval(secs => $2) WHERE id = $1`, [id, hoursAgo * 3600]);
+    await ctx.pool.query(`UPDATE orders SET delivered_at = now() - make_interval(secs => $2) WHERE id = $1`, [
+      id,
+      hoursAgo * 3600,
+    ]);
     return id;
   };
 
@@ -76,7 +82,13 @@ describe('auto-confirm sweeper', () => {
     expect(await order(recent)).toMatchObject({ status: 'DELIVERED' });
     const events = await outbox();
     expect(events.map((e) => e.routing_key)).toEqual(['order.completed']);
-    expect(events[0]!.envelope.payload).toEqual({ orderId: old, requesterId: REQ, runnerId: RUN, creditAmount: 5, orderVersion: 2 });
+    expect(events[0]!.envelope.payload).toEqual({
+      orderId: old,
+      requesterId: REQ,
+      runnerId: RUN,
+      creditAmount: 5,
+      orderVersion: 2,
+    });
   });
 
   it('a manual confirm after auto-confirm returns 200 and pays nothing twice', async () => {

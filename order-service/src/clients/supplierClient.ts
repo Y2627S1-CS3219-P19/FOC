@@ -10,8 +10,7 @@ export interface SupplierSnapshot {
 }
 
 export type SupplierCheck =
-  | { valid: true; supplier: SupplierSnapshot }
-  | { valid: false; reason: 'NOT_FOUND' | 'INACTIVE' | 'CLOSED' };
+  { valid: true; supplier: SupplierSnapshot } | { valid: false; reason: 'NOT_FOUND' | 'INACTIVE' | 'CLOSED' };
 
 export interface SupplierClient {
   validate(supplierId: string, correlationId?: string): Promise<SupplierCheck>;
@@ -26,7 +25,12 @@ export function createSupplierClient(options: Omit<InternalHttpOptions, 'service
   const http = { ...options, service: 'SUPPLIER' as const };
   return {
     async validate(supplierId, correlationId) {
-      const res = await callInternal(http, 'GET', `/v1/internal/suppliers/${encodeURIComponent(supplierId)}/validate`, correlationId);
+      const res = await callInternal(
+        http,
+        'GET',
+        `/v1/internal/suppliers/${encodeURIComponent(supplierId)}/validate`,
+        correlationId,
+      );
       if (res.status !== 200) throw new Error(`Supplier validate returned ${res.status}`);
       const { data } = res.body as ValidateBody;
       if (data.valid && data.supplier) return { valid: true, supplier: data.supplier };

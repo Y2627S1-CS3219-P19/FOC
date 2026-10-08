@@ -64,10 +64,9 @@ export async function findOrder(db: Queryable, id: string): Promise<OrderRow | n
 }
 
 export async function findHistory(db: Queryable, orderId: string): Promise<HistoryRow[]> {
-  const { rows } = await db.query<HistoryRow>(
-    'SELECT * FROM order_status_history WHERE order_id = $1 ORDER BY occurred_at, id',
-    [orderId],
-  );
+  const { rows } = await db.query<HistoryRow>('SELECT * FROM order_status_history WHERE order_id = $1 ORDER BY occurred_at, id', [
+    orderId,
+  ]);
   return rows;
 }
 
@@ -97,7 +96,13 @@ function whereBuilder() {
   };
 }
 
-async function page(db: Queryable, clause: string, params: unknown[], orderBy: string, p: { page: number; limit: number }): Promise<Page<OrderRow>> {
+async function page(
+  db: Queryable,
+  clause: string,
+  params: unknown[],
+  orderBy: string,
+  p: { page: number; limit: number },
+): Promise<Page<OrderRow>> {
   const total = await db.query<{ n: string }>(`SELECT count(*) AS n FROM orders ${clause}`, params);
   const { rows } = await db.query<OrderRow>(
     `SELECT * FROM orders ${clause} ORDER BY ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
@@ -122,8 +127,10 @@ export async function listOpen(db: Queryable, viewerId: string, q: ListOpenQuery
   if (q.deliveryLocation) w.add((p) => `delivery_location ILIKE ${p}`, `%${escapeLike(q.deliveryLocation)}%`);
   if (q.minCredit !== undefined) w.add((p) => `credit_amount >= ${p}`, q.minCredit);
   if (q.maxCredit !== undefined) w.add((p) => `credit_amount <= ${p}`, q.maxCredit);
-  if (q.minRemainingMinutes !== undefined) w.add((p) => `expires_at >= now() + make_interval(mins => ${p})`, q.minRemainingMinutes);
-  if (q.maxRemainingMinutes !== undefined) w.add((p) => `expires_at <= now() + make_interval(mins => ${p})`, q.maxRemainingMinutes);
+  if (q.minRemainingMinutes !== undefined)
+    w.add((p) => `expires_at >= now() + make_interval(mins => ${p})`, q.minRemainingMinutes);
+  if (q.maxRemainingMinutes !== undefined)
+    w.add((p) => `expires_at <= now() + make_interval(mins => ${p})`, q.maxRemainingMinutes);
   const orderBy = `${OPEN_SORTS[q.sort]} ${q.order.toUpperCase()}, id`;
   return page(db, w.clause(), w.params, orderBy, q);
 }

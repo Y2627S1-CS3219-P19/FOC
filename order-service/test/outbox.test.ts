@@ -70,7 +70,10 @@ describe('outbox monitor log line', () => {
     await outboxRow(120, null);
     const logger = fakeLogger();
     await logOutboxStatus(ctx.pool, logger as unknown as Logger);
-    expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ outbox: expect.objectContaining({ backlog: 1 }) }), expect.stringContaining('Outbox publish lag'));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ outbox: expect.objectContaining({ backlog: 1 }) }),
+      expect.stringContaining('Outbox publish lag'),
+    );
     expect(logger.info).not.toHaveBeenCalled();
   });
 

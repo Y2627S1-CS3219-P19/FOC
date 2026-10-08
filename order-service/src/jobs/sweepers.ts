@@ -29,13 +29,23 @@ async function sweep(pool: pg.Pool, logger: Logger, o: SweepOptions): Promise<nu
   for (const { id } of rows) {
     const correlationId = randomUUID();
     const order = await withTransaction(pool, async (client) => {
-      const row = await applyTransition(client, { action: o.action, actor: 'system', orderId: id, actorId: null, correlationId, reason: o.reason });
+      const row = await applyTransition(client, {
+        action: o.action,
+        actor: 'system',
+        orderId: id,
+        actorId: null,
+        correlationId,
+        reason: o.reason,
+      });
       if (row && o.after) await o.after(client, id);
       return row;
     });
     if (order) {
       changed++;
-      logger.info({ orderId: id, from: t.from, to: t.to, reason: o.reason, version: order.version, correlationId }, 'Order transition');
+      logger.info(
+        { orderId: id, from: t.from, to: t.to, reason: o.reason, version: order.version, correlationId },
+        'Order transition',
+      );
     }
   }
   return changed;

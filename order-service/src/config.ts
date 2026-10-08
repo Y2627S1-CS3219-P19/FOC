@@ -36,7 +36,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       publicUrl: noSlash(e.KEYCLOAK_PUBLIC_URL),
       realm: e.KEYCLOAK_REALM,
     },
-    allowedTokenClients: e.ALLOWED_TOKEN_CLIENTS.split(',').map((s) => s.trim()).filter(Boolean),
+    allowedTokenClients: e.ALLOWED_TOKEN_CLIENTS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
     userServiceUrl: noSlash(e.USER_SERVICE_URL),
     supplierServiceUrl: noSlash(e.SUPPLIER_SERVICE_URL),
     internalAuthSecret: e.INTERNAL_AUTH_SECRET,

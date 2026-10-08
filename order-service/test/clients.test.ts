@@ -51,7 +51,14 @@ const supplier = {
   closesAt: '21:30',
 };
 const validateBody = (valid: boolean, reason: string | null, withSupplier = true) => ({
-  data: { exists: reason !== 'NOT_FOUND', isActive: reason !== 'INACTIVE', isOpenNow: valid, valid, reason, supplier: withSupplier ? supplier : null },
+  data: {
+    exists: reason !== 'NOT_FOUND',
+    isActive: reason !== 'INACTIVE',
+    isOpenNow: valid,
+    valid,
+    reason,
+    supplier: withSupplier ? supplier : null,
+  },
 });
 
 /** Runs fn and returns the AppError it throws (fails the test if it does not throw one). */

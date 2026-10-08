@@ -40,14 +40,18 @@ const failed = (orderId: string): EventEnvelope => ({
 });
 
 const order = async (id: string) => (await ctx.pool.query('SELECT * FROM orders WHERE id = $1', [id])).rows[0];
-const outboxKeys = async () => (await ctx.pool.query('SELECT routing_key FROM outbox_events ORDER BY created_at')).rows.map((r) => r.routing_key);
+const outboxKeys = async () =>
+  (await ctx.pool.query('SELECT routing_key FROM outbox_events ORDER BY created_at')).rows.map((r) => r.routing_key);
 
 describe('handleCreditEvent', () => {
   it('credit.reserved moves PENDING to OPEN, with history and order.opened', async () => {
     const id = await insertOrder(ctx, { requesterId: REQ, status: 'PENDING' });
     expect(await handleCreditEvent(ctx.pool, reserved(id), ctx.logger)).toBe('applied');
     expect(await order(id)).toMatchObject({ status: 'OPEN', version: 2 });
-    const history = await ctx.pool.query('SELECT from_status, to_status, actor_id FROM order_status_history WHERE order_id = $1', [id]);
+    const history = await ctx.pool.query(
+      'SELECT from_status, to_status, actor_id FROM order_status_history WHERE order_id = $1',
+      [id],
+    );
     expect(history.rows).toEqual([{ from_status: 'PENDING', to_status: 'OPEN', actor_id: null }]);
     const outbox = await ctx.pool.query('SELECT routing_key, envelope FROM outbox_events');
     expect(outbox.rows[0].routing_key).toBe('order.opened');

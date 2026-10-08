@@ -2,7 +2,7 @@ import { conflict, forbidden, notFound } from '@foc/shared-middleware';
 import type { AppContext } from '../context.js';
 import { withTransaction } from '../db.js';
 import type { OrderRow } from '../domain/order.js';
-import { TRANSITIONS, type Action, type Actor } from '../domain/transitions.js';
+import { TRANSITIONS, type Actor } from '../domain/transitions.js';
 import { findOrder } from '../repositories/orderRepository.js';
 import type { Caller } from './orderService.js';
 import { applyTransition } from './transitionService.js';
@@ -74,9 +74,8 @@ function whyNot(action: UserAction, actor: Actor, order: OrderRow, userId: strin
   if (action === 'accept' && order.runner_id !== null) {
     return conflict('ALREADY_ACCEPTED', 'Another runner has already accepted this order.', { status: order.status });
   }
-  return conflict(
-    'ILLEGAL_TRANSITION',
-    `Cannot ${action} an order that is ${order.status}. It must be ${t.from}.`,
-    { status: order.status, requiredStatus: t.from },
-  );
+  return conflict('ILLEGAL_TRANSITION', `Cannot ${action} an order that is ${order.status}. It must be ${t.from}.`, {
+    status: order.status,
+    requiredStatus: t.from,
+  });
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Server } from 'node:http';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -17,13 +18,15 @@ const ACTIONS: UserAction[] = ['accept', 'withdraw', 'collect', 'deliver', 'conf
 const HAS_RUNNER: OrderStatus[] = ['ACCEPTED', 'COLLECTED', 'DELIVERED', 'COMPLETED'];
 
 let ctx: AppContext;
-let api: ReturnType<typeof createApp>;
+// One shared server: supertest would otherwise start a new server for every request.
+let api: Server;
 
 beforeAll(async () => {
   ctx = await createTestContext();
-  api = createApp(ctx);
+  api = createApp(ctx).listen(0);
 });
 afterAll(async () => {
+  api.close();
   await ctx.pool.end();
 });
 beforeEach(async () => {
@@ -40,7 +43,8 @@ const outboxKeys = async () =>
   (await ctx.pool.query('SELECT routing_key FROM outbox_events ORDER BY created_at')).rows.map((r) => r.routing_key);
 
 /** The person who is allowed to try each action. */
-const rightCaller = (action: UserAction) => (action === 'accept' ? OTHER : TRANSITIONS[action].actors.includes('runner') ? RUN : REQ);
+const rightCaller = (action: UserAction) =>
+  action === 'accept' ? OTHER : TRANSITIONS[action].actors.includes('runner') ? RUN : REQ;
 
 describe('every action from every status (by the right person)', () => {
   for (const action of ACTIONS) {
@@ -139,9 +143,20 @@ describe('lifecycle', () => {
 
     expect(await outboxKeys()).toEqual(['order.accepted', 'order.collected', 'order.delivered', 'order.completed']);
     const completed = await ctx.pool.query(`SELECT envelope FROM outbox_events WHERE routing_key = 'order.completed'`);
-    expect(completed.rows[0].envelope.payload).toEqual({ orderId: id, requesterId: REQ, runnerId: RUN, creditAmount: 5, orderVersion: 5 });
+    expect(completed.rows[0].envelope.payload).toEqual({
+      orderId: id,
+      requesterId: REQ,
+      runnerId: RUN,
+      creditAmount: 5,
+      orderVersion: 5,
+    });
     const timeline = await request(api).get(`/v1/orders/${id}/timeline`).set(as(REQ));
-    expect(timeline.body.data.map((h: { toStatus: string }) => h.toStatus)).toEqual(['ACCEPTED', 'COLLECTED', 'DELIVERED', 'COMPLETED']);
+    expect(timeline.body.data.map((h: { toStatus: string }) => h.toStatus)).toEqual([
+      'ACCEPTED',
+      'COLLECTED',
+      'DELIVERED',
+      'COMPLETED',
+    ]);
   });
 
   it('withdraw puts the order back to OPEN with no runner and the same expiry', async () => {
@@ -175,10 +190,14 @@ describe('concurrency', () => {
     const id = await orderAt('OPEN');
     const runners = Array.from({ length: 50 }, () => randomUUID());
     const results = await Promise.all(runners.map((r) => post(id, 'accept', r)));
+    // One summary, so a failure shows every status/code that came back.
+    const outcomes: Record<string, number> = {};
+    for (const r of results) {
+      const key = `${r.status} ${r.body.error?.code ?? ''}`.trim();
+      outcomes[key] = (outcomes[key] ?? 0) + 1;
+    }
+    expect(outcomes).toEqual({ '200': 1, '409 ALREADY_ACCEPTED': 49 });
     const winners = results.filter((r) => r.status === 200);
-    expect(winners).toHaveLength(1);
-    expect(results.filter((r) => r.status === 409)).toHaveLength(49);
-    expect(results.filter((r) => r.status === 409).every((r) => r.body.error.code === 'ALREADY_ACCEPTED')).toBe(true);
 
     const row = (await ctx.pool.query('SELECT runner_id, version FROM orders WHERE id = $1', [id])).rows[0];
     expect(row).toEqual({ runner_id: winners[0]!.body.data.runnerId, version: 2 });

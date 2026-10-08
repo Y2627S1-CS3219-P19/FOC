@@ -21,7 +21,9 @@ export const createOrderSchema = z
       .int('Credit amount must be a whole number.')
       .positive('Credit amount must be more than 0.')
       .max(1000, 'Credit amount must be at most 1000.'),
-    expiresAt: z.string({ required_error: 'Expiry time is required.' }).datetime({ offset: true, message: 'Expiry must be an ISO 8601 date-time.' }),
+    expiresAt: z
+      .string({ required_error: 'Expiry time is required.' })
+      .datetime({ offset: true, message: 'Expiry must be an ISO 8601 date-time.' }),
   })
   .strict();
 
