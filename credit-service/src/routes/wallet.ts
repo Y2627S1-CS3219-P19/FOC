@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireActiveSession } from '@foc/shared-middleware';
 import type { AppContext } from '../context.js';
+import { reservationsQuery, walletHistoryQuery } from '../schemas.js';
 
 export function walletRouter(ctx: AppContext): Router {
   const router = Router();
@@ -38,12 +39,34 @@ export function walletRouter(ctx: AppContext): Router {
   router.get('/reservations', async (req, res, next) => {
     try {
       const userId = req.auth!.userId;
-      const { rows } = await ctx.pool.query(
-        `SELECT id, order_id, amount, status, created_at, settled_at, released_at
-         FROM reservations WHERE requester_id = $1 ORDER BY created_at DESC LIMIT 20`,
-        [userId],
-      );
-      res.json({ data: rows, pagination: { page: 1, limit: 20, total: rows.length } });
+      const { page, limit, status } = reservationsQuery.parse(req.query);
+      const offset = (page - 1) * limit;
+
+      const whereClauses = ['requester_id = $1'];
+      const params: unknown[] = [userId];
+      if (status) {
+        params.push(status);
+        whereClauses.push(`status = $${params.length}`);
+      }
+      const where = whereClauses.join(' AND ');
+
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        ctx.pool.query(
+          `SELECT id, order_id, amount, status, created_at, settled_at, released_at
+           FROM reservations WHERE ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+          [...params, limit, offset],
+        ),
+        ctx.pool.query<{ count: string }>(
+          `SELECT count(*)::int AS count FROM reservations WHERE ${where}`,
+          params,
+        ),
+      ]);
+
+      const totalItems = Number(countRows[0].count);
+      res.json({
+        data: rows,
+        pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) },
+      });
     } catch (err) {
       next(err);
     }
@@ -53,12 +76,34 @@ export function walletRouter(ctx: AppContext): Router {
   router.get('/history', async (req, res, next) => {
     try {
       const userId = req.auth!.userId;
-      const { rows } = await ctx.pool.query(
-        `SELECT id, reservation_id, type, amount, balance_after, created_at
-         FROM ledger WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`,
-        [userId],
-      );
-      res.json({ data: rows, pagination: { page: 1, limit: 20, total: rows.length } });
+      const { page, limit, type } = walletHistoryQuery.parse(req.query);
+      const offset = (page - 1) * limit;
+
+      const whereClauses = ['user_id = $1'];
+      const params: unknown[] = [userId];
+      if (type) {
+        params.push(type);
+        whereClauses.push(`type = $${params.length}`);
+      }
+      const where = whereClauses.join(' AND ');
+
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        ctx.pool.query(
+          `SELECT id, reservation_id, type, amount, balance_after, created_at
+           FROM ledger WHERE ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+          [...params, limit, offset],
+        ),
+        ctx.pool.query<{ count: string }>(
+          `SELECT count(*)::int AS count FROM ledger WHERE ${where}`,
+          params,
+        ),
+      ]);
+
+      const totalItems = Number(countRows[0].count);
+      res.json({
+        data: rows,
+        pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) },
+      });
     } catch (err) {
       next(err);
     }

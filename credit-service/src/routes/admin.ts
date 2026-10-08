@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireActiveSession, requireRole } from '@foc/shared-middleware';
 import type { AppContext } from '../context.js';
+import { walletHistoryQuery, userIdParam } from '../schemas.js';
 
 export function adminRouter(ctx: AppContext): Router {
   const router = Router();
@@ -35,13 +36,35 @@ export function adminRouter(ctx: AppContext): Router {
   // GET /v1/admin/credits/users/:userId/history — admin view of a user's ledger
   router.get('/users/:userId/history', async (req, res, next) => {
     try {
-      const { userId } = req.params;
-      const { rows } = await ctx.pool.query(
-        `SELECT id, reservation_id, type, amount, balance_after, created_at
-         FROM ledger WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50`,
-        [userId],
-      );
-      res.json({ data: rows, pagination: { page: 1, limit: 50, total: rows.length } });
+      const { userId } = userIdParam.parse(req.params);
+      const { page, limit, type } = walletHistoryQuery.parse(req.query);
+      const offset = (page - 1) * limit;
+
+      const whereClauses = ['user_id = $1'];
+      const params: unknown[] = [userId];
+      if (type) {
+        params.push(type);
+        whereClauses.push(`type = $${params.length}`);
+      }
+      const where = whereClauses.join(' AND ');
+
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        ctx.pool.query(
+          `SELECT id, reservation_id, type, amount, balance_after, created_at
+           FROM ledger WHERE ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+          [...params, limit, offset],
+        ),
+        ctx.pool.query<{ count: string }>(
+          `SELECT count(*)::int AS count FROM ledger WHERE ${where}`,
+          params,
+        ),
+      ]);
+
+      const totalItems = Number(countRows[0].count);
+      res.json({
+        data: rows,
+        pagination: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) },
+      });
     } catch (err) {
       next(err);
     }
