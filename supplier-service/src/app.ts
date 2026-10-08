@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import { healthRoutes } from './routes/health.js';
 import { imageRoutes } from './routes/images.js';
 import { supplierRoutes } from './routes/suppliers.js';
+import { internalRoutes } from './routes/internal.js';
 import { errorHandler } from './middleware/errors.js';
 import authPlugin, { type AuthPluginOptions } from './middleware/auth.js';
 import { InMemorySupplierRepository, type SupplierRepository } from './db/repository.js';
@@ -46,6 +47,13 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   await app.register(supplierRoutes, {
     prefix: '/v1/suppliers',
     repository,
+  });
+
+  // Register internal routes
+  await app.register(internalRoutes, {
+    prefix: '/v1/internal',
+    repository,
+    internalAuthSecret: opts.authConfig?.internalAuthSecret,
   });
 
   return app;

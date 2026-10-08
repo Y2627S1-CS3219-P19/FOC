@@ -468,15 +468,113 @@ paths:
           content:
             application/json:
               schema:
+  /internal/suppliers/{id}/validate:
+    get:
+      summary: Validate supplier for internal order processing
+      description: |
+        Internal service-to-service endpoint for Order Service to check whether a supplier
+        exists, is active, and is currently open before creating an order.
+        Requires the X-Internal-Auth header. Rejects user session tokens.
+      operationId: validateSupplierInternal
+      security:
+        - internal: []
+      parameters:
+        - name: id
+          in: path
+          description: Supplier UUID.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: Validation verdict and snapshot supplier details.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - exists
+                      - isActive
+                      - isOpenNow
+                      - valid
+                      - reason
+                      - supplier
+                    properties:
+                      exists:
+                        type: boolean
+                        example: true
+                      isActive:
+                        type: boolean
+                        example: true
+                      isOpenNow:
+                        type: boolean
+                        example: true
+                      valid:
+                        type: boolean
+                        example: true
+                      reason:
+                        type: string
+                        nullable: true
+                        enum: [NOT_FOUND, INACTIVE, CLOSED]
+                        example: null
+                      supplier:
+                        type: object
+                        nullable: true
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          name:
+                            type: string
+                          facilityType:
+                            type: string
+                          building:
+                            type: string
+                          floor:
+                            type: string
+                            nullable: true
+                          locationDescription:
+                            type: string
+                            nullable: true
+                          opensAt:
+                            type: string
+                            example: "09:00"
+                          closesAt:
+                            type: string
+                            example: "21:30"
+        '401':
+          description: Missing or invalid internal auth secret.
+          content:
+            application/json:
+              schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-              example:
-                error:
-                  code: IMAGE_NOT_FOUND
-                  message: The requested image does not exist
-                  details: {}
+        '403':
+          description: Called with user session token instead of internal auth.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Invalid UUID parameter format.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
 components:
   securitySchemes:
+    internal:
+      type: apiKey
+      in: header
+      name: X-Internal-Auth
+      description: Shared internal secret for backend-to-backend calls.
     BearerAuth:
       type: http
       scheme: bearer
@@ -485,6 +583,7 @@ components:
         Keycloak Bearer access token issued for `campuserrand-spa` (web app) or `campuserrand-test` (dev/testing).
         Verified locally against Keycloak's public keys (JWKS).
         Admin endpoints require `"admin"` in `realm_access.roles`.
+
 
   schemas:
     Supplier:
