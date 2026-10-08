@@ -123,7 +123,41 @@ Send requests to `http://localhost:4010/v1/suppliers`. The server returns mock d
 
 ---
 
+### 3.3 Service-to-Service Internal Endpoints
+*Requires header `X-Internal-Auth: <INTERNAL_AUTH_SECRET>`. Requests carrying user `Authorization` Bearer tokens are rejected with `403 USER_TOKEN_NOT_ALLOWED`.*
+
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/v1/internal/suppliers/{id}/validate` | Validate supplier existence, active status, and open status for Order Service | FoC Backend Services |
+
+#### Validation Response Format:
+```json
+{
+  "data": {
+    "exists": true,
+    "isActive": true,
+    "isOpenNow": true,
+    "valid": true,
+    "reason": null,
+    "supplier": {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "name": "Cool Spot",
+      "facilityType": "Food",
+      "building": "Com 2",
+      "floor": "1",
+      "locationDescription": "Opp LT16",
+      "opensAt": "09:00",
+      "closesAt": "21:30"
+    }
+  }
+}
+```
+* `reason`: `NOT_FOUND` (supplier ID does not exist), `INACTIVE` (deactivated), `CLOSED` (outside operating hours), or `null` when valid.
+
+---
+
 ## 4. Requirements Traceability
+
 
 | Requirement | Description | Implementation |
 | :--- | :--- | :--- |
