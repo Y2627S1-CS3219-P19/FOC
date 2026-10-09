@@ -47,6 +47,8 @@ services:
       - "8080:8080"
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # Tapau look for the login pages (set as the realm's loginTheme).
+      - ./infra/keycloak/themes/tapau:/opt/keycloak/themes/tapau:ro
     depends_on:
       keycloak-db:
         condition: service_healthy
