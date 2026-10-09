@@ -1,28 +1,29 @@
 # Supplier Service
 
-The Supplier Service manages the campus supplier catalog (food stalls, cafes, bookstores, convenience stores, and printing facilities) for **Friend on Campus (FoC)**. 
+The Supplier Service manages the campus supplier catalog for **Friend on Campus (FoC)**. The catalog includes food stalls, cafes, bookstores, convenience stores, and printing facilities.
 
-It provides catalog search, multi-attribute filtering, and real-time open status for students, as well as administrative endpoints for supplier management and catalog maintenance.
+The service provides catalog search, multi-attribute filtering, and real-time open status for students. It also provides administrative endpoints for supplier management.
 
 ---
 
 ## 1. API Specification
 
-The formal machine-readable OpenAPI 3.0 contract is defined in [`openapi.yaml`](./openapi.yaml).
+[`openapi.yaml`](./openapi.yaml) defines the formal OpenAPI 3.0 contract.
 
-### Quick Mock Server (For Frontend & Teammates)
-To run a zero-code live mock server against this contract for local development:
+### Mock Server
+
+To run a live mock server for local development without code:
 
 ```bash
-# Using Prism (instant mock server)
+# Run Prism mock server
 npx @stoplight/prism-cli mock supplier-service/openapi.yaml -p 4010
 ```
 
-You can now send requests to `http://localhost:4010/v1/suppliers` and receive mock data conforming to the schema.
+Send requests to `http://localhost:4010/v1/suppliers`. The server returns mock data that matches the schema.
 
 ---
 
-## 2. Core Entities & Conventions
+## 2. Core Entities and Conventions
 
 ### Conventions
 - **Base URL:** `/v1`
@@ -87,7 +88,7 @@ You can now send requests to `http://localhost:4010/v1/suppliers` and receive mo
 
 ## 3. Endpoints Overview
 
-### 3.1 Catalog & Browsing (`F7`)
+### 3.1 Catalog and Browsing (`F7`)
 
 | Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
@@ -113,7 +114,7 @@ You can now send requests to `http://localhost:4010/v1/suppliers` and receive mo
 
 | Method | Path | Description | Access |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/v1/suppliers` | Create a new supplier (`F8.1`) | Admin |
+| `POST` | `/v1/suppliers` | Create a supplier (`F8.1`) | Admin |
 | `PATCH` | `/v1/suppliers/{id}` | Update supplier details (`F9.3`) | Admin |
 | `PATCH` | `/v1/suppliers/{id}/deactivate` | Soft-deactivate an active supplier (`F9.1`) | Admin |
 | `PATCH` | `/v1/suppliers/{id}/reactivate` | Reactivate a deactivated supplier (`F9.2`) | Admin |
@@ -122,9 +123,43 @@ You can now send requests to `http://localhost:4010/v1/suppliers` and receive mo
 
 ---
 
-## 4. Functional Requirements Traceability
+### 3.3 Service-to-Service Internal Endpoints
+*Requires header `X-Internal-Auth: <INTERNAL_AUTH_SECRET>`. Requests carrying user `Authorization` Bearer tokens are rejected with `403 USER_TOKEN_NOT_ALLOWED`.*
 
-| Req ID | Description | Handled By |
+| Method | Path | Description | Access |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/v1/internal/suppliers/{id}/validate` | Validate supplier existence, active status, and open status for Order Service | FoC Backend Services |
+
+#### Validation Response Format:
+```json
+{
+  "data": {
+    "exists": true,
+    "isActive": true,
+    "isOpenNow": true,
+    "valid": true,
+    "reason": null,
+    "supplier": {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "name": "Cool Spot",
+      "facilityType": "Food",
+      "building": "Com 2",
+      "floor": "1",
+      "locationDescription": "Opp LT16",
+      "opensAt": "09:00",
+      "closesAt": "21:30"
+    }
+  }
+}
+```
+* `reason`: `NOT_FOUND` (supplier ID does not exist), `INACTIVE` (deactivated), `CLOSED` (outside operating hours), or `null` when valid.
+
+---
+
+## 4. Requirements Traceability
+
+
+| Requirement | Description | Implementation |
 | :--- | :--- | :--- |
 | **F7.1** | Display suppliers with names and attributes | `GET /v1/suppliers`, `GET /v1/suppliers/{id}` |
 | **F7.1.1** | Unique supplier name verification | Enforced on `POST /v1/suppliers` and `PATCH /v1/suppliers/{id}` (`409 SUPPLIER_NAME_TAKEN`) |

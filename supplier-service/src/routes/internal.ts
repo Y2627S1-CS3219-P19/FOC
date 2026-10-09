@@ -1,44 +1,66 @@
-import { Router } from 'express';
-import { parseOrThrow, requireInternal } from '@foc/shared-middleware';
-import type { AppContext } from '../context.js';
-import { idParamSchema } from '../schemas.js';
-import { findSupplier } from '../suppliers.js';
+import { timingSafeEqual } from 'node:crypto';
+import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
+import { unauthorized, forbidden } from '../middleware/errors.js';
+import type { SupplierRepository } from '../db/repository.js';
+import { idParamSchema } from '../schemas/supplier.js';
 
-/** Service-to-service routes; only callable with X-Internal-Auth, never with a user token. */
-export function internalRouter(ctx: AppContext): Router {
-  const router = Router();
-  router.use(requireInternal(ctx.config.internalAuthSecret));
+export interface InternalRoutesOptions {
+  repository: SupplierRepository;
+  internalAuthSecret?: string;
+}
 
-  // F10A: the Order Service checks a supplier exists, is active and is open now before creating an order,
-  // and copies the returned details into the order as a snapshot.
-  router.get('/suppliers/:id/validate', async (req, res) => {
-    const { id } = parseOrThrow(idParamSchema, req.params);
-    const s = await findSupplier(ctx.pool, id, ctx.config.timezone);
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+export const internalRoutes: FastifyPluginAsync<InternalRoutesOptions> = async (fastify, opts) => {
+  const repo = opts.repository;
+  const secret = opts.internalAuthSecret ?? process.env.INTERNAL_AUTH_SECRET ?? 'test-internal-secret';
+
+  // Guard all /v1/internal/* routes
+  fastify.addHook('preHandler', async (req: FastifyRequest, _reply: FastifyReply) => {
+    if (req.headers.authorization) {
+      throw forbidden('USER_TOKEN_NOT_ALLOWED', 'Internal endpoints cannot be called with a user session.');
+    }
+
+    const provided = req.headers['x-internal-auth'] as string | undefined;
+    if (!provided || !safeEqual(provided, secret)) {
+      throw unauthorized('INTERNAL_AUTH_REQUIRED', 'This endpoint is only available to FoC backend services.');
+    }
+  });
+
+  fastify.get('/suppliers/:id/validate', async (req, _reply) => {
+    const { id } = idParamSchema.parse(req.params);
+    const s = await repo.findById(id);
+
     const exists = !!s;
-    const isActive = !!s?.is_active;
-    const isOpenNow = isActive && !!s?.is_open_now;
-    res.json({
+    const isActive = !!s?.isActive;
+    const isOpenNow = !!s?.isOpenNow;
+    const valid = exists && isActive && isOpenNow;
+    const reason = !exists ? 'NOT_FOUND' : !isActive ? 'INACTIVE' : !isOpenNow ? 'CLOSED' : null;
+
+    return {
       data: {
         exists,
         isActive,
         isOpenNow,
-        valid: exists && isActive && isOpenNow,
-        reason: !exists ? 'NOT_FOUND' : !isActive ? 'INACTIVE' : !isOpenNow ? 'CLOSED' : null,
+        valid,
+        reason,
         supplier: s
           ? {
               id: s.id,
               name: s.name,
-              facilityType: s.facility_type,
+              facilityType: s.facilityType,
               building: s.building,
               floor: s.floor,
-              locationDescription: s.location_description,
-              opensAt: s.opens_at.slice(0, 5),
-              closesAt: s.closes_at.slice(0, 5),
+              locationDescription: s.locationDescription,
+              opensAt: s.opensAt.slice(0, 5),
+              closesAt: s.closesAt.slice(0, 5),
             }
           : null,
       },
-    });
+    };
   });
-
-  return router;
-}
+};
