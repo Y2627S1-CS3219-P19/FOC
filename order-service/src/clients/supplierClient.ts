@@ -17,7 +17,12 @@ export interface SupplierClient {
 }
 
 interface ValidateBody {
-  data: { valid: boolean; reason: 'NOT_FOUND' | 'INACTIVE' | 'CLOSED' | null; supplier: SupplierSnapshot | null };
+  data: {
+    valid: boolean;
+    reason: 'NOT_FOUND' | 'INACTIVE' | 'CLOSED' | null;
+    // Supplier Service allows an empty location description; the order snapshot column does not.
+    supplier: (Omit<SupplierSnapshot, 'locationDescription'> & { locationDescription: string | null }) | null;
+  };
 }
 
 /** GET /v1/internal/suppliers/:id/validate on the Supplier Service. */
@@ -33,7 +38,13 @@ export function createSupplierClient(options: Omit<InternalHttpOptions, 'service
       );
       if (res.status !== 200) throw new Error(`Supplier validate returned ${res.status}`);
       const { data } = res.body as ValidateBody;
-      if (data.valid && data.supplier) return { valid: true, supplier: data.supplier };
+      if (data.valid && data.supplier) {
+        const { id, name, facilityType, building, floor, locationDescription } = data.supplier;
+        return {
+          valid: true,
+          supplier: { id, name, facilityType, building, floor, locationDescription: locationDescription ?? '' },
+        };
+      }
       return { valid: false, reason: data.reason ?? 'NOT_FOUND' };
     },
   };

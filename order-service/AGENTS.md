@@ -35,7 +35,8 @@ Local rules for coding agents. The root `AGENTS.md` applies too.
 
 - Stay inside `order-service/` unless the change is wiring: `compose.yaml` (`orders-db`, `order-service`),
   `frontend/nginx.conf` (`/v1/orders`), root `.env.example` (`ORDERS_DB_PASSWORD`), root `package.json` workspaces.
-  Every service Dockerfile copies `order-service/package.json`; keep that line if you touch them.
+  The user-, credit- and order-service Dockerfiles copy `order-service/package.json`; keep that line if you touch them.
+  (supplier-service builds on its own from `./supplier-service`, so its Dockerfile must not.)
 - `mocks/` is temporary; delete it when Credit Service replies to `order.created` itself.
 
 ## Before you hand off
