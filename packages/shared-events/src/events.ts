@@ -117,9 +117,18 @@ export interface CreditsReleasedPayload {
   amount: number;
 }
 
+export interface CreditReservationFailedPayload {
+  orderId: string;
+  requesterId: string;
+  amount: number;
+  availableBalance: number | null;
+  reason: 'INSUFFICIENT_CREDITS' | 'NO_WALLET';
+}
+
 export const CREDIT_EVENTS = {
   walletCreated: defineEvent<CreditWalletCreatedPayload>('CreditWalletCreated', EXCHANGES.credit, 'credit.wallet_created'),
   reserved: defineEvent<CreditsReservedPayload>('CreditsReserved', EXCHANGES.credit, 'credit.reserved'),
+  reservationFailed: defineEvent<CreditReservationFailedPayload>('CreditReservationFailed', EXCHANGES.credit, 'credit.reservation_failed'),
   returned: defineEvent<CreditsReturnedPayload>('CreditsReturned', EXCHANGES.credit, 'credit.returned'),
   released: defineEvent<CreditsReleasedPayload>('CreditsReleased', EXCHANGES.credit, 'credit.released'),
 } as const;

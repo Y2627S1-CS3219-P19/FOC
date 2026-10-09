@@ -108,7 +108,7 @@ describe('handleOrderCreated', () => {
     expect(rows[0].envelope.payload.amount).toBe(10);
   });
 
-  it('does nothing when insufficient credits', async () => {
+  it('publishes CreditReservationFailed when insufficient credits', async () => {
     await runInTx((c) => seedWallet(c, TEST_USER_ID, 10));
     const orderId = randomUUID();
     await runInTx((c) =>
@@ -119,18 +119,31 @@ describe('handleOrderCreated', () => {
     expect(w!.available_balance).toBe(10);
     expect(w!.reserved_balance).toBe(0);
 
-    const { rows } = await ctx.pool.query('SELECT * FROM reservations WHERE order_id = $1', [orderId]);
-    expect(rows).toHaveLength(0);
+    const { rows: res } = await ctx.pool.query('SELECT * FROM reservations WHERE order_id = $1', [orderId]);
+    expect(res).toHaveLength(0);
+
+    const { rows } = await ctx.pool.query("SELECT envelope FROM outbox_events WHERE event_type = 'CreditReservationFailed'");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].envelope.payload.orderId).toBe(orderId);
+    expect(rows[0].envelope.payload.availableBalance).toBe(10);
+    expect(rows[0].envelope.payload.reason).toBe('INSUFFICIENT_CREDITS');
   });
 
-  it('does nothing when wallet not found', async () => {
+  it('publishes CreditReservationFailed when wallet not found', async () => {
     const orderId = randomUUID();
+    const requesterId = randomUUID();
     await runInTx((c) =>
-      handleOrderCreated(c, env<OrderCreatedPayload>('OrderCreated', { orderId, requesterId: randomUUID(), creditAmount: 10 }), ctx.logger),
+      handleOrderCreated(c, env<OrderCreatedPayload>('OrderCreated', { orderId, requesterId, creditAmount: 10 }), ctx.logger),
     );
 
-    const { rows } = await ctx.pool.query('SELECT * FROM reservations WHERE order_id = $1', [orderId]);
-    expect(rows).toHaveLength(0);
+    const { rows: res } = await ctx.pool.query('SELECT * FROM reservations WHERE order_id = $1', [orderId]);
+    expect(res).toHaveLength(0);
+
+    const { rows } = await ctx.pool.query("SELECT envelope FROM outbox_events WHERE event_type = 'CreditReservationFailed'");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].envelope.payload.orderId).toBe(orderId);
+    expect(rows[0].envelope.payload.availableBalance).toBeNull();
+    expect(rows[0].envelope.payload.reason).toBe('NO_WALLET');
   });
 
   it('is idempotent — duplicate orderId skips', async () => {
