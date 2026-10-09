@@ -50,6 +50,16 @@ const supplier = {
   opensAt: '09:00',
   closesAt: '21:30',
 };
+// What the client keeps for the order snapshot (opening hours are not stored on the order).
+const snapshot = {
+  id: supplier.id,
+  name: supplier.name,
+  facilityType: supplier.facilityType,
+  building: supplier.building,
+  floor: supplier.floor,
+  locationDescription: supplier.locationDescription,
+};
+
 const validateBody = (valid: boolean, reason: string | null, withSupplier = true) => ({
   data: {
     exists: reason !== 'NOT_FOUND',
@@ -80,7 +90,16 @@ describe('supplier client', () => {
     expect(lastHeaders['x-internal-auth']).toBe(SECRET);
     expect(lastHeaders['x-correlation-id']).toBe('corr-abc-123');
     expect(lastHeaders.authorization).toBeUndefined();
-    expect(result).toEqual({ valid: true, supplier });
+    expect(result).toEqual({ valid: true, supplier: snapshot });
+  });
+
+  it('turns an empty location description into an empty string, so the order can be saved', async () => {
+    reply = {
+      status: 200,
+      body: { data: { ...validateBody(true, null).data, supplier: { ...supplier, locationDescription: null } } },
+    };
+    const result = await supplierClient().validate(SUPPLIER_ID);
+    expect(result).toEqual({ valid: true, supplier: { ...snapshot, locationDescription: '' } });
   });
 
   it.each([
