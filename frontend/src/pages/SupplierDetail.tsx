@@ -60,6 +60,11 @@ export function SupplierDetailPage() {
           </dl>
         </div>
       </div>
+      {supplier.isActive && supplier.isOpenNow && (
+        <Link className="button primary" to={`/errands/new?supplier=${supplier.id}`}>
+          Request an errand from here
+        </Link>
+      )}
       <ErrorBox error={error} />
       {isAdmin && (
         <div className="card row wrap">
