@@ -1,0 +1,95 @@
+/* Tapau look for Keycloak's login pages. Same colours and fonts as frontend/src/styles.css. */
+@import url('https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;600;700&display=swap');
+
+:root {
+  --tapau-bg: #f5ead8;
+  --tapau-card: #f9f4ed;
+  --tapau-surface: #ebddc5;
+  --tapau-text: #201e1d;
+  --tapau-muted: #645c50;
+  --tapau-accent: #c67139;
+  --tapau-accent-dark: #b2622d;
+  --tapau-border: rgba(32, 30, 29, 0.16);
+
+  /* PatternFly 5 tokens that the login pages are built from */
+  --pf-v5-global--FontFamily--text: 'Figtree', system-ui, sans-serif;
+  --pf-v5-global--FontFamily--heading: 'Caprasimo', system-ui, sans-serif;
+  --pf-v5-global--primary-color--100: var(--tapau-accent);
+  --pf-v5-global--primary-color--200: var(--tapau-accent-dark);
+  --pf-v5-global--link--Color: var(--tapau-accent-dark);
+  --pf-v5-global--link--Color--hover: var(--tapau-text);
+  --pf-v5-global--Color--100: var(--tapau-text);
+  --pf-v5-global--Color--200: var(--tapau-muted);
+  --pf-v5-global--BackgroundColor--100: var(--tapau-card);
+  --keycloak-card-top-color: var(--tapau-accent);
+}
+
+.login-pf body,
+body {
+  background: var(--tapau-bg) !important;
+  color: var(--tapau-text);
+  font-family: 'Figtree', system-ui, sans-serif;
+}
+
+/* Header: "T  Tapau" brand above the card */
+#kc-header-wrapper {
+  color: var(--tapau-text) !important;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: 'Caprasimo', system-ui, sans-serif;
+  font-size: 2.2rem;
+}
+.tapau-brand { display: inline-flex; align-items: center; gap: 12px; }
+.tapau-mark {
+  width: 46px; height: 46px; border-radius: 13px; background: var(--tapau-accent); color: #fff8f1;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem;
+}
+
+/* Card */
+.pf-v5-c-login__main {
+  background: var(--tapau-card);
+  border: 1px solid var(--tapau-border);
+  border-radius: 28px;
+  box-shadow: 0 3px 10px rgba(46, 43, 37, 0.16);
+  overflow: hidden;
+}
+.pf-v5-c-login__main-header { border-top: none; }
+.pf-v5-c-login__main-header .pf-v5-c-title,
+#kc-page-title {
+  font-family: 'Caprasimo', system-ui, sans-serif;
+  font-weight: 400;
+  color: var(--tapau-text);
+}
+
+/* Inputs */
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BorderRadius: 8px;
+  --pf-v5-c-form-control--BackgroundColor: #fffdf9;
+  border-radius: 8px;
+}
+.pf-v5-c-form-control::after { border-radius: 8px; }
+.pf-v5-c-form__label-text { font-weight: 600; }
+
+/* Buttons: pill shaped, terracotta primary */
+.pf-v5-c-button {
+  border-radius: 999px !important;
+  font-weight: 600;
+}
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--tapau-accent);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--tapau-accent-dark);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--tapau-accent-dark);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--tapau-accent-dark);
+  --pf-v5-c-button--m-primary--Color: #fff8f1;
+  padding-block: 12px;
+}
+.pf-v5-c-button.pf-m-secondary {
+  --pf-v5-c-button--m-secondary--Color: var(--tapau-text);
+  --pf-v5-c-button--after--BorderColor: var(--tapau-border);
+}
+.pf-v5-c-button.pf-m-link { --pf-v5-c-button--m-link--Color: var(--tapau-accent-dark); }
+
+a { color: var(--tapau-accent-dark); }
+
+/* Info band under the card ("New user?", etc.) */
+.pf-v5-c-login__main-footer-band { background: var(--tapau-surface); }
