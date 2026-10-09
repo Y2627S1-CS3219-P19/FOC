@@ -96,7 +96,11 @@ them as compiled code:
 
     npm run build:packages
     npm test -w user-service
-    npm test -w supplier-service
+
+Supplier Service is its own npm project (own package-lock.json, not part of the root
+workspace), so it installs and tests on its own:
+
+    cd supplier-service && npm ci && npm test
 
 
 7. GET A TOKEN FOR CURL / POSTMAN

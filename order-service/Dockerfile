@@ -6,7 +6,6 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/shared-middleware/package.json packages/shared-middleware/
 COPY packages/shared-events/package.json packages/shared-events/
 COPY user-service/package.json user-service/
-COPY supplier-service/package.json supplier-service/
 COPY credit-service/package.json credit-service/
 COPY order-service/package.json order-service/
 COPY frontend/package.json frontend/
