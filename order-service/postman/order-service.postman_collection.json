@@ -1,0 +1,1357 @@
+{
+  "info": {
+    "_postman_id": "7838dc08-63eb-49f7-84a8-1d7c5a22edb5",
+    "name": "FoC Order Service",
+    "description": "All Order Service endpoints, through the gateway (frontend nginx). Run the folders top to bottom, or use the Collection Runner. See postman/DEMO.md for the live demo. Set the usernames and passwords in the collection variables first; the users must exist in Keycloak with a verified email, and adminUsername must have the admin role.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5173"
+    },
+    {
+      "key": "keycloakUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "requesterUsername",
+      "value": "alice"
+    },
+    {
+      "key": "requesterPassword",
+      "value": ""
+    },
+    {
+      "key": "runnerUsername",
+      "value": "ben"
+    },
+    {
+      "key": "runnerPassword",
+      "value": ""
+    },
+    {
+      "key": "otherRunnerUsername",
+      "value": "chloe"
+    },
+    {
+      "key": "otherRunnerPassword",
+      "value": ""
+    },
+    {
+      "key": "adminUsername",
+      "value": "admin"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "requesterToken",
+      "value": ""
+    },
+    {
+      "key": "runnerToken",
+      "value": ""
+    },
+    {
+      "key": "otherRunnerToken",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "requesterId",
+      "value": ""
+    },
+    {
+      "key": "runnerId",
+      "value": ""
+    },
+    {
+      "key": "otherRunnerId",
+      "value": ""
+    },
+    {
+      "key": "adminId",
+      "value": ""
+    },
+    {
+      "key": "supplierId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "cancelOrderId",
+      "value": ""
+    },
+    {
+      "key": "expiresAt",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Log in",
+      "item": [
+        {
+          "name": "Login as requester",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/campuserrand/protocol/openid-connect/token"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "client_id",
+                  "value": "campuserrand-test"
+                },
+                {
+                  "key": "username",
+                  "value": "{{requesterUsername}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{requesterPassword}}"
+                }
+              ]
+            },
+            "description": "Gets an access token for the requester and saves requesterToken and requesterId (the token's sub)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().access_token;",
+                  "pm.collectionVariables.set('requesterToken', token);",
+                  "const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "pm.collectionVariables.set('requesterId', JSON.parse(atob(part)).sub);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as runner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/campuserrand/protocol/openid-connect/token"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "client_id",
+                  "value": "campuserrand-test"
+                },
+                {
+                  "key": "username",
+                  "value": "{{runnerUsername}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{runnerPassword}}"
+                }
+              ]
+            },
+            "description": "Gets an access token for the runner and saves runnerToken and runnerId (the token's sub)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().access_token;",
+                  "pm.collectionVariables.set('runnerToken', token);",
+                  "const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "pm.collectionVariables.set('runnerId', JSON.parse(atob(part)).sub);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as otherRunner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/campuserrand/protocol/openid-connect/token"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "client_id",
+                  "value": "campuserrand-test"
+                },
+                {
+                  "key": "username",
+                  "value": "{{otherRunnerUsername}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{otherRunnerPassword}}"
+                }
+              ]
+            },
+            "description": "Gets an access token for the otherRunner and saves otherRunnerToken and otherRunnerId (the token's sub)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().access_token;",
+                  "pm.collectionVariables.set('otherRunnerToken', token);",
+                  "const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "pm.collectionVariables.set('otherRunnerId', JSON.parse(atob(part)).sub);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login as admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": {
+              "raw": "{{keycloakUrl}}/realms/campuserrand/protocol/openid-connect/token"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "client_id",
+                  "value": "campuserrand-test"
+                },
+                {
+                  "key": "username",
+                  "value": "{{adminUsername}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{adminPassword}}"
+                }
+              ]
+            },
+            "description": "Gets an access token for the admin and saves adminToken and adminId (the token's sub)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().access_token;",
+                  "pm.collectionVariables.set('adminToken', token);",
+                  "const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');",
+                  "pm.collectionVariables.set('adminId', JSON.parse(atob(part)).sub);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Pick a supplier",
+      "item": [
+        {
+          "name": "List suppliers open now",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/suppliers?status=open_now&limit=5"
+            },
+            "description": "Supplier Service. Saves the first open supplier as supplierId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const first = pm.response.json().data[0];",
+                  "pm.test('a supplier is open now', () => pm.expect(first).to.be.an('object'));",
+                  "pm.collectionVariables.set('supplierId', first.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Create and read",
+      "item": [
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders"
+            },
+            "description": "Returns 202 with a PENDING order. Credit Service replies through RabbitMQ; then the order is OPEN or REJECTED. ",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"deliveryLocation\": \"COM1 lobby\",\n  \"items\": [\n    \"1x chicken rice\",\n    \"1x iced milo\"\n  ],\n  \"creditAmount\": 5,\n  \"expiresAt\": \"{{expiresAt}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('expiresAt', new Date(Date.now() + 2 * 3600 * 1000).toISOString());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "const order = pm.response.json().data;",
+                  "pm.test('starts PENDING', () => pm.expect(order.status).to.eql('PENDING'));",
+                  "pm.collectionVariables.set('orderId', order.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get order (wait until OPEN)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}"
+            },
+            "description": "Polls until Credit Service has answered. Shows the requester and runner summaries from the User Service."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const order = pm.response.json().data;",
+                  "if (order.status === 'PENDING') {",
+                  "  // Credit has not replied yet: try again in 1s (Collection Runner only).",
+                  "  setTimeout(() => {}, 1000);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.test('is OPEN', () => pm.expect(order.status).to.eql('OPEN'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Timeline (requester)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/timeline"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mine as requester",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/mine?as=requester"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Browse open orders (runner)",
+      "item": [
+        {
+          "name": "List open orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('includes the new order', () => pm.expect(pm.response.json().data.map(o => o.id)).to.include(pm.collectionVariables.get('orderId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sort by credit, highest first",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders?sort=credit&order=desc"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter by building and facility type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders?building=Com2&facilityType=Food"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter by credit range and remaining time",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders?minCredit=3&maxCredit=10&minRemainingMinutes=30&maxRemainingMinutes=180"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter by delivery location",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders?deliveryLocation=com1"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Page 2, 5 per page",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders?page=2&limit=5"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Requester's own orders are hidden",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('own order not listed', () => pm.expect(pm.response.json().data.map(o => o.id)).to.not.include(pm.collectionVariables.get('orderId')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Happy path",
+      "item": [
+        {
+          "name": "Requester accepts own order -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/accept"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error CANNOT_ACCEPT_OWN_ORDER', () => pm.expect(pm.response.json().error.code).to.eql('CANNOT_ACCEPT_OWN_ORDER'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept (runner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/accept"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('now ACCEPTED', () => pm.expect(pm.response.json().data.status).to.eql('ACCEPTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Second runner accepts -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{otherRunnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/accept"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('error ALREADY_ACCEPTED', () => pm.expect(pm.response.json().error.code).to.eql('ALREADY_ACCEPTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Other user collects -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{otherRunnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/collect"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error NOT_ORDER_PARTICIPANT', () => pm.expect(pm.response.json().error.code).to.eql('NOT_ORDER_PARTICIPANT'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mine as runner",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/mine?as=runner"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Collect (runner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/collect"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('now COLLECTED', () => pm.expect(pm.response.json().data.status).to.eql('COLLECTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deliver (runner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/deliver"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('now DELIVERED', () => pm.expect(pm.response.json().data.status).to.eql('DELIVERED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm (requester)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/confirm"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('now COMPLETED', () => pm.expect(pm.response.json().data.status).to.eql('COMPLETED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm again -> 200, unchanged",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/confirm"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Timeline (full history)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}/timeline"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Withdraw and cancel",
+      "item": [
+        {
+          "name": "Create order to withdraw and cancel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders"
+            },
+            "description": "Returns 202 with a PENDING order. Credit Service replies through RabbitMQ; then the order is OPEN or REJECTED. ",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"deliveryLocation\": \"COM1 lobby\",\n  \"items\": [\n    \"1x chicken rice\",\n    \"1x iced milo\"\n  ],\n  \"creditAmount\": 5,\n  \"expiresAt\": \"{{expiresAt}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('expiresAt', new Date(Date.now() + 2 * 3600 * 1000).toISOString());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 202', () => pm.response.to.have.status(202));",
+                  "const order = pm.response.json().data;",
+                  "pm.test('starts PENDING', () => pm.expect(order.status).to.eql('PENDING'));",
+                  "pm.collectionVariables.set('cancelOrderId', order.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get order (wait until OPEN)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{cancelOrderId}}"
+            },
+            "description": "Polls until Credit Service has answered. Shows the requester and runner summaries from the User Service."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const order = pm.response.json().data;",
+                  "if (order.status === 'PENDING') {",
+                  "  // Credit has not replied yet: try again in 1s (Collection Runner only).",
+                  "  setTimeout(() => {}, 1000);",
+                  "  pm.execution.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.test('is OPEN', () => pm.expect(order.status).to.eql('OPEN'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept (runner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{cancelOrderId}}/accept"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('now ACCEPTED', () => pm.expect(pm.response.json().data.status).to.eql('ACCEPTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Requester cancels after accept -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{cancelOrderId}}/cancel"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "pm.test('error ILLEGAL_TRANSITION', () => pm.expect(pm.response.json().error.code).to.eql('ILLEGAL_TRANSITION'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Withdraw (runner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{cancelOrderId}}/withdraw"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('now OPEN', () => pm.expect(pm.response.json().data.status).to.eql('OPEN'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel (requester)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{cancelOrderId}}/cancel"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('now CANCELLED', () => pm.expect(pm.response.json().data.status).to.eql('CANCELLED'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Admin",
+      "item": [
+        {
+          "name": "Orders of a user (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/by-user/{{requesterId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orders of a user (regular user) -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{runnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/by-user/{{requesterId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error INSUFFICIENT_ROLE', () => pm.expect(pm.response.json().error.code).to.eql('INSUFFICIENT_ROLE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Any order detail (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Errors",
+      "item": [
+        {
+          "name": "No token -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error TOKEN_MISSING', () => pm.expect(pm.response.json().error.code).to.eql('TOKEN_MISSING'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bad input -> 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"not-a-uuid\",\n  \"items\": [],\n  \"creditAmount\": 0\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 422', () => pm.response.to.have.status(422));",
+                  "pm.test('error VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Expiry more than 24h away -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supplierId\": \"{{supplierId}}\",\n  \"deliveryLocation\": \"COM1 lobby\",\n  \"items\": [\n    \"1x chicken rice\",\n    \"1x iced milo\"\n  ],\n  \"creditAmount\": 5,\n  \"expiresAt\": \"{{farExpiresAt}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.collectionVariables.set('farExpiresAt', new Date(Date.now() + 25 * 3600 * 1000).toISOString());"]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error EXPIRY_TOO_FAR', () => pm.expect(pm.response.json().error.code).to.eql('EXPIRY_TOO_FAR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown order -> 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{requesterToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/00000000-0000-4000-8000-000000000000"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error ORDER_NOT_FOUND', () => pm.expect(pm.response.json().error.code).to.eql('ORDER_NOT_FOUND'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Completed order hidden from strangers -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{otherRunnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/orders/{{orderId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 403', () => pm.response.to.have.status(403));",
+                  "pm.test('error NOT_ORDER_PARTICIPANT', () => pm.expect(pm.response.json().error.code).to.eql('NOT_ORDER_PARTICIPANT'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -222,6 +222,54 @@ services:
       <<: *healthcheck-defaults
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/health/ready"]
 
+  # ---------- Order Service ----------
+  orders-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: ${ORDERS_DB_PASSWORD}
+    ports:
+      - "5436:5432"
+    volumes:
+      - orders-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U orders -d orders_db"]
+
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    environment:
+      PORT: 3004
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://orders:${ORDERS_DB_PASSWORD}@orders-db:5432/orders_db
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:8080
+      KEYCLOAK_REALM: campuserrand
+      USER_SERVICE_URL: http://user-service:3001
+      SUPPLIER_SERVICE_URL: http://supplier-service:3002
+      INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET}
+      AMQP_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      DEBUG_EVENT_QUEUE: ${DEBUG_EVENT_QUEUE:-true}
+      TRUST_PROXY: "1"
+    # No host port: only reachable through the gateway (frontend nginx, /v1/orders).
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      supplier-service:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3004/health/ready"]
+
   # ---------- Web app (also acts as the local API gateway) ----------
   frontend:
     build:
@@ -236,10 +284,13 @@ services:
         condition: service_healthy
       credit-service:
         condition: service_healthy
+      order-service:
+        condition: service_healthy
 
 volumes:
   keycloak-db-data:
   users-db-data:
   suppliers-db-data:
   credits-db-data:
+  orders-db-data:
   rabbitmq-data:

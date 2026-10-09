@@ -8,7 +8,7 @@ most of it waiting for the first Docker build.
 ----------------
 - Docker Desktop, running. This is the only thing needed to RUN the app.
 - Node.js 22+ and npm. Only needed to run the TESTS or to edit code outside Docker.
-- These ports free: 5173, 8080, 8025, 3001, 3002, 5433, 5434, 5672, 15672
+- These ports free: 5173, 8080, 8025, 3001, 3002, 5433, 5434, 5435, 5436, 5672, 15672
 
 All commands below are run from the FOC/ folder.
 
@@ -168,14 +168,17 @@ Docker build fails on "npm ci"
   frontend          React web app + local API gateway          port 5173
   user-service      accounts, profiles, admin, audit           port 3001
   supplier-service  supplier directory                         port 3002
+  order-service     errand orders and their lifecycle          internal only (via frontend /v1/orders)
   keycloak          login, passwords, sessions, tokens         port 8080
   users-db          Postgres for the User Service              port 5433
   suppliers-db      Postgres for the Supplier Service          port 5434
+  orders-db         Postgres for the Order Service             port 5436
   keycloak-db       Postgres for Keycloak                      internal only
   rabbitmq          events between services                    ports 5672 / 15672
   mailpit           catches outgoing email                     port 8025
 
-Order Service and Credit Service are not built yet.
+Credit Service is not finished yet: it does not reserve credits for new orders. For an Order Service
+demo, run its stand-in (order-service/mocks/credit-mock.ts, see order-service/postman/DEMO.md).
 
 More detail:
   README.md   - overview and structure
