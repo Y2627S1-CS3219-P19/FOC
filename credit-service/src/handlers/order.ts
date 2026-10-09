@@ -36,12 +36,18 @@ export async function handleOrderCreated(
   );
   if (walletRows.length === 0) {
     log.error({ orderId, requesterId }, 'OrderCreated: wallet not found for requester');
+    await addOutboxEvent(client, CREDIT_EVENTS.reservationFailed, {
+      orderId, requesterId, amount: creditAmount, availableBalance: null, reason: 'NO_WALLET',
+    }, envelope.correlationId);
     return;
   }
 
   const available = walletRows[0].available_balance;
   if (available < creditAmount) {
     log.error({ orderId, requesterId, available, required: creditAmount }, 'OrderCreated: insufficient credits');
+    await addOutboxEvent(client, CREDIT_EVENTS.reservationFailed, {
+      orderId, requesterId, amount: creditAmount, availableBalance: available, reason: 'INSUFFICIENT_CREDITS',
+    }, envelope.correlationId);
     return;
   }
 
