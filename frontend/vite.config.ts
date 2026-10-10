@@ -14,6 +14,7 @@ export default defineConfig({
       '/v1/supplier-images': 'http://localhost:3002',
       '/v1/auth': 'http://localhost:3001',
       '/v1/users': 'http://localhost:3001',
+      '/v1/admin/credits': 'http://localhost:3003',
       '/v1/admin': 'http://localhost:3001',
     },
   },
