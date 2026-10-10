@@ -8,6 +8,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      '/v1/orders': 'http://localhost:3004',
+      '/v1/credits': 'http://localhost:3003',
       '/v1/suppliers': 'http://localhost:3002',
       '/v1/supplier-images': 'http://localhost:3002',
       '/v1/auth': 'http://localhost:3001',
