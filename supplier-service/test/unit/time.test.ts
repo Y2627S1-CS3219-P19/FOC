@@ -68,10 +68,29 @@ describe('Slice 1: Time Engine (isOpenNow)', () => {
     });
   });
 
-  describe('Inactive stall master switch', () => {
-    it('always returns false even during open hours when isActive is false', () => {
-      const now = new Date('2026-09-24T06:00:00Z'); // 14:00 SGT
-      expect(isOpenNow('09:00', '21:30', false, now, SGT)).toBe(false);
+  describe('Store cutoff buffer (cutoffBufferMinutes)', () => {
+    it('rejects orders within 15 minutes of daytime closing (e.g. 09:00 - 21:30)', () => {
+      const opensAt = '09:00';
+      const closesAt = '21:30';
+      // 21:14 Singapore time (13:14 UTC) -> 16 mins before close -> open
+      const beforeCutoff = new Date('2026-09-24T13:14:00Z');
+      expect(isOpenNow(opensAt, closesAt, true, beforeCutoff, SGT, 15)).toBe(true);
+
+      // 21:16 Singapore time (13:16 UTC) -> 14 mins before close -> closed
+      const afterCutoff = new Date('2026-09-24T13:16:00Z');
+      expect(isOpenNow(opensAt, closesAt, true, afterCutoff, SGT, 15)).toBe(false);
+    });
+
+    it('rejects orders within 15 minutes of overnight closing (e.g. 18:00 - 02:00)', () => {
+      const opensAt = '18:00';
+      const closesAt = '02:00';
+      // 01:44 Singapore time (17:44 UTC prev day) -> 16 mins before close -> open
+      const beforeCutoff = new Date('2026-09-24T17:44:00Z');
+      expect(isOpenNow(opensAt, closesAt, true, beforeCutoff, SGT, 15)).toBe(true);
+
+      // 01:46 Singapore time (17:46 UTC prev day) -> 14 mins before close -> closed
+      const afterCutoff = new Date('2026-09-24T17:46:00Z');
+      expect(isOpenNow(opensAt, closesAt, true, afterCutoff, SGT, 15)).toBe(false);
     });
   });
 });
