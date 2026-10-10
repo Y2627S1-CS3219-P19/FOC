@@ -22,6 +22,8 @@ Guide for automated coding agents in this repo.
 
 PR bodies **must follow [`.github/pull_request_template.md`](.github/pull_request_template.md)** — exact section headers, checklist ticked honestly (annotate items that don't apply). Under "Describe your changes": what changed and why, validation commands run, follow-ups called out instead of half-implemented hidden scope.
 
+PRs must be sent to the staging branch first before main.
+
 ## 4) Ownership: Agent vs Human
 
 - **Service Ownership:** Services have designated student owners (see [README.md](README.md)). Any non-trivial change touching a service should be reviewed by that service's owner.
