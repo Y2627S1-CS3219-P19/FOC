@@ -7,6 +7,7 @@ import {
   handleOrderWithdrawn,
   handleOrderCancelled,
   handleOrderExpired,
+  handleOrderRejected,
 } from '../../src/handlers/order.js';
 import { handleUserRegistered } from '../../src/handlers/user.js';
 import {
@@ -21,6 +22,7 @@ import type {
   OrderCancelledPayload,
   OrderExpiredPayload,
 } from '@foc/shared-events';
+import type { OrderRejectedPayload } from '../../src/handlers/order.js';
 
 let ctx: AppContext;
 
@@ -321,6 +323,69 @@ describe('handleOrderWithdrawn / Cancelled / Expired', () => {
     await runInTx((c) => seedWallet(c, TEST_USER_ID, 100));
     await runInTx((c) =>
       handleOrderWithdrawn(c, env<OrderWithdrawnPayload>('OrderWithdrawn', { orderId: randomUUID() }), ctx.logger),
+    );
+
+    const w = await getWallet(TEST_USER_ID);
+    expect(w!.available_balance).toBe(100);
+  });
+});
+
+// ── handleOrderRejected ──
+
+describe('handleOrderRejected', () => {
+  async function setupReservation(amount = 30) {
+    const orderId = randomUUID();
+    await runInTx((c) => seedWallet(c, TEST_USER_ID, 100));
+    await runInTx((c) =>
+      handleOrderCreated(c, env<OrderCreatedPayload>('OrderCreated', { orderId, requesterId: TEST_USER_ID, creditAmount: amount }), ctx.logger),
+    );
+    return orderId;
+  }
+
+  it('releases credits back to available', async () => {
+    const orderId = await setupReservation(30);
+    await runInTx((c) =>
+      handleOrderRejected(c, env<OrderRejectedPayload>('OrderRejected', { orderId, requesterId: TEST_USER_ID, reason: 'PENDING_TIMEOUT' }), ctx.logger),
+    );
+
+    const w = await getWallet(TEST_USER_ID);
+    expect(w!.available_balance).toBe(100);
+    expect(w!.reserved_balance).toBe(0);
+
+    const { rows } = await ctx.pool.query('SELECT status, released_at FROM reservations WHERE order_id = $1', [orderId]);
+    expect(rows[0].status).toBe('RELEASED');
+    expect(rows[0].released_at).not.toBeNull();
+  });
+
+  it('records a RELEASE ledger entry with positive amount', async () => {
+    const orderId = await setupReservation(30);
+    await runInTx((c) =>
+      handleOrderRejected(c, env<OrderRejectedPayload>('OrderRejected', { orderId, requesterId: TEST_USER_ID, reason: 'INSUFFICIENT_CREDITS' }), ctx.logger),
+    );
+
+    const { rows } = await ctx.pool.query(
+      "SELECT amount, balance_after FROM ledger WHERE user_id = $1 AND type = 'RELEASE'", [TEST_USER_ID],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amount).toBe(30);
+    expect(rows[0].balance_after).toBe(100);
+  });
+
+  it('publishes CreditsReturned outbox event with reason rejected', async () => {
+    const orderId = await setupReservation(25);
+    await runInTx((c) =>
+      handleOrderRejected(c, env<OrderRejectedPayload>('OrderRejected', { orderId, requesterId: TEST_USER_ID, reason: 'PENDING_TIMEOUT' }), ctx.logger),
+    );
+
+    const { rows } = await ctx.pool.query("SELECT envelope FROM outbox_events WHERE event_type = 'CreditsReturned'");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].envelope.payload.reason).toBe('rejected');
+  });
+
+  it('skips gracefully when no HELD reservation exists', async () => {
+    await runInTx((c) => seedWallet(c, TEST_USER_ID, 100));
+    await runInTx((c) =>
+      handleOrderRejected(c, env<OrderRejectedPayload>('OrderRejected', { orderId: randomUUID(), requesterId: TEST_USER_ID, reason: 'PENDING_TIMEOUT' }), ctx.logger),
     );
 
     const w = await getWallet(TEST_USER_ID);
