@@ -1,0 +1,192 @@
+asyncapi: 3.1.0
+info:
+  title: Friend on Campus (FoC) - Supplier Service Messaging API
+  version: 1.0.0
+  description: |
+    Asynchronous event-driven and Direct Reply-To RPC contracts for the FoC Supplier Service.
+    Enables low-latency decoupled supplier verification for order-service checkout sagas.
+  license:
+    name: MIT
+
+servers:
+  rabbitmq:
+    host: localhost:5672
+    protocol: amqp
+    description: Campus RabbitMQ message broker for inter-service communication
+
+channels:
+  supplierValidation:
+    address: supplier.rpc.validate
+    description: Durable queue for Direct Reply-To RPC supplier verification requests
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          durable: true
+          exclusive: false
+          autoDelete: false
+    messages:
+      validateRequest:
+        $ref: '#/components/messages/SupplierValidateRequestMessage'
+      validateResponse:
+        $ref: '#/components/messages/SupplierValidateResponseMessage'
+
+operations:
+  validateSupplier:
+    action: receive
+    channel:
+      $ref: '#/channels/supplierValidation'
+    description: |
+      Consumes supplier verification requests from order-service and responds
+      via native RabbitMQ Direct Reply-To (amq.rabbitmq.reply-to).
+    reply:
+      address:
+        location: '$message.header#/replyTo'
+      channel:
+        address: amq.rabbitmq.reply-to
+    messages:
+      - $ref: '#/channels/supplierValidation/messages/validateRequest'
+
+components:
+  messages:
+    SupplierValidateRequestMessage:
+      name: SupplierValidateRequest
+      title: Supplier Validation Request
+      summary: Request sent by order-service during checkout to verify stall eligibility
+      headers:
+        type: object
+        properties:
+          correlationId:
+            type: string
+            format: uuid
+            description: Unique correlation ID to match the RPC reply with the caller promise
+          replyTo:
+            type: string
+            description: Destination for the RPC reply (must be 'amq.rabbitmq.reply-to')
+        required:
+          - correlationId
+          - replyTo
+      payload:
+        $ref: '#/components/schemas/SupplierValidateRequestPayload'
+
+    SupplierValidateResponseMessage:
+      name: SupplierValidateResponse
+      title: Supplier Validation Response
+      summary: Response emitted by supplier-service back to order-service via Direct Reply-To
+      headers:
+        type: object
+        properties:
+          correlationId:
+            type: string
+            format: uuid
+            description: Matching correlation ID corresponding to the incoming request
+        required:
+          - correlationId
+      payload:
+        $ref: '#/components/schemas/SupplierValidateResponsePayload'
+
+  schemas:
+    SupplierValidateRequestPayload:
+      type: object
+      properties:
+        supplierId:
+          type: string
+          format: uuid
+          description: Unique identifier of the supplier / campus stall
+          example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+        timestamp:
+          type: string
+          format: date-time
+          description: |
+            Authoritative order checkout creation timestamp (ISO 8601).
+            Evaluated for:
+            1. 15-minute store cutoff buffer before closesAt.
+            2. Queue staleness (Date.now() - timestamp > 60s fails fast with QUEUE_TIMEOUT_EXPIRED).
+          example: '2026-09-24T12:00:00.000Z'
+      required:
+        - supplierId
+
+    SupplierValidateResponsePayload:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          description: Master eligibility flag (true only if stall exists, isActive, and open with cutoff buffer)
+          example: true
+        exists:
+          type: boolean
+          description: Whether the supplier ID was found in suppliers_db
+          example: true
+        isActive:
+          type: boolean
+          description: Whether the stall is currently active (not soft-deleted)
+          example: true
+        isOpenNow:
+          type: boolean
+          description: Whether the stall was open at message.timestamp considering the 15-min cutoff buffer
+          example: true
+        reason:
+          type: string
+          enum:
+            - NOT_FOUND
+            - INACTIVE
+            - CLOSED
+            - QUEUE_TIMEOUT_EXPIRED
+          nullable: true
+          description: |
+            Detailed failure reason when valid is false (null when valid is true):
+            - `NOT_FOUND`: Supplier ID does not exist (Map to HTTP 404 SUPPLIER_NOT_FOUND).
+            - `INACTIVE`: Stall is soft-deactivated by admin (Map to HTTP 400 SUPPLIER_INACTIVE).
+            - `CLOSED`: Order submitted outside opening hours or within the 15-minute cutoff buffer (Map to HTTP 400 SUPPLIER_CLOSED).
+            - `QUEUE_TIMEOUT_EXPIRED`: Queue latency exceeded 60 seconds (Map to HTTP 409 QUEUE_TIMEOUT_EXPIRED; refund without ringing merchant).
+          example: null
+        supplier:
+          $ref: '#/components/schemas/SupplierSnapshot'
+      required:
+        - valid
+        - exists
+        - isActive
+        - isOpenNow
+        - reason
+        - supplier
+
+    SupplierSnapshot:
+      type: object
+      nullable: true
+      description: Read-only snapshot of stall attributes at time of verification (null if NOT_FOUND or QUEUE_TIMEOUT_EXPIRED)
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 'Cool Spot'
+        facilityType:
+          type: string
+          example: 'Food'
+        building:
+          type: string
+          example: 'Com 2'
+        floor:
+          type: string
+          nullable: true
+          example: '1'
+        locationDescription:
+          type: string
+          nullable: true
+          example: 'Opp LT16'
+        opensAt:
+          type: string
+          pattern: '^([0-1][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '09:00'
+        closesAt:
+          type: string
+          pattern: '^([0-1][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '21:30'
+      required:
+        - id
+        - name
+        - facilityType
+        - building
+        - opensAt
+        - closesAt

@@ -6,20 +6,21 @@ The service provides catalog search, multi-attribute filtering, and real-time op
 
 ---
 
-## 1. API Specification
+## 1. API Specifications
 
-[`openapi.yaml`](./openapi.yaml) defines the formal OpenAPI 3.0 contract.
+`supplier-service` adheres to contract-first design with two standardized interface specifications:
 
-### Mock Server
+### 1.1 Client & Public REST API (OpenAPI 3.0)
+[`openapi.yaml`](./openapi.yaml) defines the formal OpenAPI 3.0 contract for public catalog and admin HTTP endpoints.
 
 To run a live mock server for local development without code:
-
 ```bash
-# Run Prism mock server
 npx @stoplight/prism-cli mock supplier-service/openapi.yaml -p 4010
 ```
+Send requests to `http://localhost:4010/v1/suppliers`. The server returns mock data matching the schema.
 
-Send requests to `http://localhost:4010/v1/suppliers`. The server returns mock data that matches the schema.
+### 1.2 Inter-Service Messaging RPC (AsyncAPI 3.0)
+[`asyncapi.yaml`](./asyncapi.yaml) defines the formal AsyncAPI 3.0 contract for RabbitMQ Direct Reply-To RPC verification (`supplier.rpc.validate`) consumed by `order-service`.
 
 ---
 
@@ -153,6 +154,50 @@ Send requests to `http://localhost:4010/v1/suppliers`. The server returns mock d
 }
 ```
 * `reason`: `NOT_FOUND` (supplier ID does not exist), `INACTIVE` (deactivated), `CLOSED` (outside operating hours), or `null` when valid.
+
+---
+
+### 3.4 Direct Reply-To RPC Validation (RabbitMQ)
+*Queue:* `supplier.rpc.validate` | *Reply Exchange:* `amq.rabbitmq.reply-to`
+
+Direct Reply-To RPC consumer providing decoupled, low-latency supplier verification for `order-service` checkout sagas.
+
+#### Dual-Temporal Validation Semantics:
+1. **Store Cutoff Window (`message.timestamp`)**: Evaluates operating hours against `(closesAt - 15 minutes)` in Singapore time (`Asia/Singapore`). If the customer checkout timestamp occurred within 15 minutes of closing or after close, the order fails with `valid: false, reason: 'CLOSED'`.
+2. **Queue Staleness & Expiry (`Date.now()`)**:
+   - The RPC consumer evaluates queue latency on message arrival: `queue_latency = Date.now() - message.timestamp`.
+   - **Performance Expectation:** This check is designed to be **instantaneous** (<50ms round-trip).
+   - **Friction Ceiling:** A latency of 60 seconds is already at the extreme upper bound of acceptable interactive checkout friction. If `queue_latency > 60s`, the consumer immediately rejects the request with `valid: false, reason: 'QUEUE_TIMEOUT_EXPIRED'` without querying the database or ringing merchant terminals, protecting against backlog drainage or worker restart delays.
+
+#### RPC Request Payload:
+```json
+{
+  "supplierId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "timestamp": "2026-09-24T12:00:00.000Z"
+}
+```
+
+#### RPC Response Payload:
+```json
+{
+  "exists": true,
+  "isActive": true,
+  "isOpenNow": true,
+  "valid": true,
+  "reason": null,
+  "supplier": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "name": "Cool Spot",
+    "facilityType": "Food",
+    "building": "Com 2",
+    "floor": "1",
+    "locationDescription": "Opp LT16",
+    "opensAt": "09:00",
+    "closesAt": "21:30"
+  }
+}
+```
+* `reason`: `NOT_FOUND`, `INACTIVE`, `CLOSED`, `QUEUE_TIMEOUT_EXPIRED`, or `null`.
 
 ---
 

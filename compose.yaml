@@ -166,12 +166,15 @@ services:
       INTERNAL_AUTH_SECRET: ${INTERNAL_AUTH_SECRET}
       SEED_CSV_PATH: /app/data/csv/supplier-seed-data.csv
       IMAGES_DIR: /app/data/images
+      AMQP_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
     ports:
       - "3002:3002"
     depends_on:
       suppliers-db:
         condition: service_healthy
       user-service:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck-defaults
