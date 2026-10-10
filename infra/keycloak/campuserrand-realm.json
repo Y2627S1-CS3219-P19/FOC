@@ -1,6 +1,7 @@
 {
   "realm": "campuserrand",
   "displayName": "Friend on Campus",
+  "loginTheme": "tapau",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
