@@ -4,6 +4,7 @@ import { useAuth, userManager } from './auth';
 import { DebugStrip, RequireAdmin, RequireLogin } from './components';
 import { useWallet } from './errands';
 import { AdminRoleChangesPage } from './pages/AdminRoleChanges';
+import { AdminCreditsPage } from './pages/AdminCredits';
 import { AdminUsersPage } from './pages/AdminUsers';
 import { BoardPage } from './pages/Board';
 import { CreditsPage } from './pages/Credits';
@@ -112,6 +113,9 @@ export function App() {
               <NavLink to="/admin/role-changes" onClick={close}>
                 Admin: role changes
               </NavLink>
+              <NavLink to="/admin/credits" onClick={close}>
+                Admin: credits
+              </NavLink>
             </>
           )}
           {user && <CreditPill />}
@@ -147,6 +151,7 @@ export function App() {
           <Route path="/suppliers/:id/edit" element={<RequireAdmin><SupplierFormPage /></RequireAdmin>} />
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/role-changes" element={<RequireAdmin><AdminRoleChangesPage /></RequireAdmin>} />
+          <Route path="/admin/credits" element={<RequireAdmin><AdminCreditsPage /></RequireAdmin>} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </main>
