@@ -212,8 +212,7 @@ services:
       DEBUG_EVENT_QUEUE: ${DEBUG_EVENT_QUEUE:-true}
       INITIAL_CREDIT_BALANCE: 100
       TRUST_PROXY: "1"
-    ports:
-      - "3003:3003"
+    # No host port: only reachable through the gateway (frontend nginx, /v1/credits and /v1/admin/credits).
     depends_on:
       credits-db:
         condition: service_healthy
