@@ -250,3 +250,17 @@ export async function handleOrderExpired(
 ): Promise<void> {
   await releaseCredits(client, envelope.payload.orderId, 'expired', envelope.correlationId, log);
 }
+
+export interface OrderRejectedPayload {
+  orderId: string;
+  requesterId: string;
+  reason: string;
+}
+
+export async function handleOrderRejected(
+  client: PoolClient,
+  envelope: EventEnvelope<OrderRejectedPayload>,
+  log: Logger,
+): Promise<void> {
+  await releaseCredits(client, envelope.payload.orderId, 'rejected', envelope.correlationId, log);
+}
