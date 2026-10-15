@@ -1,11 +1,9 @@
 import dotenv from 'dotenv';
-import amqplib from 'amqplib';
 import { buildApp } from './app.js';
 import { createDb } from './db/connection.js';
 import { DrizzleSupplierRepository } from './db/drizzleRepository.js';
 import { runMigrations } from './db/migrate.js';
 import { runSeed } from './db/seed.js';
-import { startSupplierRpcConsumer } from './events/rpcConsumer.js';
 
 dotenv.config();
 
@@ -29,19 +27,6 @@ async function main() {
   }
 
   const repository = new DrizzleSupplierRepository(db);
-
-  let amqpConn: amqplib.ChannelModel | null = null;
-  let amqpChannel: amqplib.Channel | null = null;
-  if (process.env.AMQP_URL) {
-    try {
-      amqpConn = await amqplib.connect(process.env.AMQP_URL);
-      amqpChannel = await amqpConn.createChannel();
-      await startSupplierRpcConsumer(amqpChannel, repository);
-      console.log('Supplier RPC consumer initialized on RabbitMQ.');
-    } catch (err) {
-      console.error('Failed to initialize AMQP RPC consumer:', err);
-    }
-  }
 
   const app = await buildApp({
     dbReady: isDbReady,
@@ -70,8 +55,6 @@ async function main() {
   const shutdown = async () => {
     console.log('Gracefully shutting down Supplier Service...');
     await app.close();
-    if (amqpChannel) await amqpChannel.close().catch(() => {});
-    if (amqpConn) await amqpConn.close().catch(() => {});
     await client.end();
     process.exit(0);
   };

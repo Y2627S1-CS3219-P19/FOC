@@ -13,45 +13,31 @@ Conventions and API contracts for coding agents working on `supplier-service`.
 
 ## 2. API Contracts
 
-`supplier-service` exposes two external contracts:
+`supplier-service` exposes one external contract:
 
 1. **North-South HTTP REST Contract:** [`openapi.yaml`](./openapi.yaml)
    - Public catalog search, filters, pagination (`/v1/suppliers`).
    - Admin CRUD (`POST`, `PATCH`, `DELETE /v1/suppliers`).
    - Mock server command: `npx @stoplight/prism-cli mock openapi.yaml -p 4010`.
 
-2. **East-West RabbitMQ Messaging Contract:** [`asyncapi.yaml`](./asyncapi.yaml)
-   - Queue: `supplier.rpc.validate`
-   - Mechanism: RabbitMQ Direct Reply-To (`amq.rabbitmq.reply-to`).
-   - Used by `order-service` to verify supplier eligibility during checkout.
+Retired: the East-West RabbitMQ contract (`supplier.rpc.validate`, formerly `asyncapi.yaml`) was removed after the team decided on HTTP verification. The implementation and spec are preserved on the `spike/supplier-rpc` branch.
 
 ---
 
 ## 3. Order-Service Integration Guide
 
-When `order-service` checks out an order, it must verify the stall via RabbitMQ RPC.
-
-### Client Helper
-Import the helper from `@foc/shared-events`:
-```typescript
-import { createSupplierRpcClient } from '@foc/shared-events';
-
-const client = createSupplierRpcClient(channel);
-const response = await client.validateSupplier({
-  supplierId: order.supplierId,
-  // timestamp defaults to new Date().toISOString()
-});
-```
+When `order-service` checks out an order, it verifies the stall over HTTP:
+`GET /v1/internal/suppliers/:id/validate` with the `X-Internal-Auth` header
+(internal endpoints reject user JWTs). See `routes/internal.ts`.
 
 ### Outcome Handling Matrix
 
-| `response.reason` | Condition | Recommended HTTP Status / Action |
+| `reason` | Condition | Recommended HTTP Status / Action |
 | :--- | :--- | :--- |
 | `null` (`valid: true`) | Stall exists, active, and open for orders | `200 OK` $\rightarrow$ proceed with checkout |
 | `NOT_FOUND` | Stall ID does not exist | `404 Not Found` (`SUPPLIER_NOT_FOUND`) |
 | `INACTIVE` | Stall is soft-deactivated | `400 Bad Request` (`SUPPLIER_INACTIVE`) |
 | `CLOSED` | Outside operating hours or order within 15-min cutoff | `400 Bad Request` (`SUPPLIER_CLOSED`) |
-| `QUEUE_TIMEOUT_EXPIRED` | Message queue latency exceeded 60 seconds | `409 Conflict` (`QUEUE_TIMEOUT_EXPIRED`) $\rightarrow$ fail fast and refund customer |
 
 ---
 
@@ -60,7 +46,7 @@ const response = await client.validateSupplier({
 ```bash
 cd supplier-service
 
-# Run all 84 automated tests
+# Run all 74 automated tests
 npm test
 
 # Build TypeScript
