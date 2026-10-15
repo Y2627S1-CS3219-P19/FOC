@@ -21,7 +21,6 @@
 | **Public Assets** | `GET /v1/supplier-images/:file` via `@fastify/static` | Static image delivery from `data/images/` without auth headers |
 | **Two-Tier Authentication** | Keycloak JWKS + User Service Introspection | JWKS verification via `jose`, 5s cached introspection with fail-closed (`503`) |
 | **Internal Inter-Service API** | `GET /v1/internal/suppliers/:id/validate` | Protected by `X-Internal-Auth` secret; allows `order-service` to validate supplier existence, active status, and opening hours |
-| **RabbitMQ RPC Verification** | `supplier.rpc.validate` | Direct Reply-To RPC consumer with dual-temporal checks (15m store cutoff buffer + 60s queue staleness ceiling) |
 | **Container Isolation** | Dedicated `context: ./supplier-service` + local lockfile | Zero dependencies on sibling folders or monorepo root lockfile; builds in <5s |
 | **Testing** | **Vitest** (Unit, Integration, CLI Demos) | 84 passing tests across 12 test suites |
 
@@ -54,8 +53,6 @@ supplier-service/
 │   │   ├── schema.ts             # 3NF Drizzle table definition
 │   │   ├── seed.ts               # Idempotent CSV stall seeder (onConflictDoNothing)
 │   │   └── seedParser.ts         # Pure CSV parser converting hours & URLs
-│   ├── events/
-│   │   └── rpcConsumer.ts        # RabbitMQ Direct Reply-To RPC consumer (supplier.rpc.validate)
 │   ├── middleware/
 │   │   ├── auth.ts               # Keycloak JWKS + User Service session introspection
 │   │   └── errors.ts             # FoC standard error envelope and AppError classes
@@ -79,7 +76,6 @@ supplier-service/
     │   └── public-routes.test.ts # Health probes & image delivery
     └── unit/
         ├── migrate.test.ts       # Database migration runner unit tests
-        ├── rpcConsumer.test.ts   # RabbitMQ Direct Reply-To RPC consumer unit tests
         ├── schemas.test.ts       # Strict Zod validation & tags rejection
         ├── seed-parser.test.ts   # Seed CSV parsing
         ├── seed.test.ts          # Idempotent seeding unit tests
