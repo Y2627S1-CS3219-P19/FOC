@@ -42,14 +42,34 @@ Supersnacks,Food,Prince George's Park,1,"At level 1 in Prince George's Park Resi
     expect(records[0]?.locationDescription).toBe("At level 1 in Prince George's Park Residences, Block 10");
   });
 
+  it('normalises typographic punctuation to ASCII', () => {
+    const csvContent = `Name,Type,Building,Floor,Location Description,Latitude,Longitude,StartingTime,ClosingTime,ImageURL
+Octobox,Shopping,Prince George’s Park,2,Near PGP entrance — level 2,1.2904347,103.7787588,0000hrs,2359hrs,`;
+
+    const records = parseSeedCsv(csvContent);
+    expect(records[0]?.building).toBe("Prince George's Park");
+    expect(records[0]?.locationDescription).toBe('Near PGP entrance - level 2');
+  });
+
   it('parses the actual seed CSV file containing 21 records', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const realCsvPath = path.resolve(__dirname, '../../../data/csv/supplier-seed-data.csv');
-    const content = fs.readFileSync(realCsvPath, 'utf8');
+    const bytes = fs.readFileSync(realCsvPath);
+
+    // The shipped file must be UTF-8; .decode throws on a Windows-1252 export.
+    const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 
     const records = parseSeedCsv(content);
     expect(records).toHaveLength(21);
     expect(records.every((r) => r.opensAt.length === 5 && r.closesAt.length === 5)).toBe(true);
+
+    const fields = records.flatMap((r) => [r.name, r.facilityType, r.building, r.floor ?? '', r.locationDescription ?? '']);
+    expect(fields.filter((f) => f.includes('\uFFFD'))).toEqual([]);
+    expect(records.filter((r) => r.building === "Prince George's Park").map((r) => r.name)).toEqual([
+      'A Hot Hideout',
+      'Octobox',
+      'Supersnacks',
+    ]);
   });
 });
