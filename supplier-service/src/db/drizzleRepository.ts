@@ -1,7 +1,7 @@
 import { eq, sql, and, or, inArray, ilike, count } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from './schema.js';
-import { isOpenNow } from '../utils/time.js';
+import { isOpenNow, localHHMM } from '../utils/time.js';
 import type {
   SupplierRepository,
   SupplierDto,
@@ -9,32 +9,61 @@ import type {
   ListSuppliersQuery,
 } from './repository.js';
 
+/**
+ * Case-insensitive match on one or more facility types.
+ *
+ * Not `= ANY(${types}::text[])`: drizzle expands a raw array into a param list, so the cast would
+ * see one scalar and Postgres would fail with 22P02.
+ */
+export function facilityTypeFilter(types: string[]) {
+  return inArray(sql`lower(${schema.suppliers.facilityType})`, types);
+}
+
+/**
+ * Open-now predicate mirroring `isOpenNow(opensAt, closesAt, true, …, tz, 0)`, so counting and
+ * pagination see the same rows the DTOs report.
+ */
+export function openNowFilter(nowHHMM: string) {
+  const { opensAt, closesAt } = schema.suppliers;
+  return sql`(
+    (${opensAt} <= ${closesAt} AND ${nowHHMM} >= ${opensAt} AND ${nowHHMM} <= ${closesAt})
+    OR (${opensAt} > ${closesAt} AND (${nowHHMM} >= ${opensAt} OR ${nowHHMM} <= ${closesAt}))
+  )`;
+}
+
 export class DrizzleSupplierRepository implements SupplierRepository {
-  constructor(private db: PostgresJsDatabase<typeof schema>) {}
+  constructor(
+    private db: PostgresJsDatabase<typeof schema>,
+    private readonly now: () => Date = () => new Date()
+  ) {}
 
   private toDto(row: schema.Supplier): SupplierDto {
     return {
       ...row,
-      isOpenNow: isOpenNow(row.opensAt, row.closesAt, row.isActive),
+      isOpenNow: isOpenNow(row.opensAt, row.closesAt, row.isActive, this.now()),
     };
   }
 
   async list(query: ListSuppliersQuery, isAdmin: boolean): Promise<{ data: SupplierDto[]; total: number }> {
     const conditions = [];
 
-    if (!isAdmin) {
+    const onlyActive = !isAdmin || query.status === 'active' || query.status === 'open_now';
+    const onlyInactive = isAdmin && query.status === 'inactive';
+    if (onlyActive) {
       conditions.push(eq(schema.suppliers.isActive, true));
-    } else {
-      if (query.status === 'active') {
-        conditions.push(eq(schema.suppliers.isActive, true));
-      } else if (query.status === 'inactive') {
-        conditions.push(eq(schema.suppliers.isActive, false));
-      }
+    } else if (onlyInactive) {
+      conditions.push(eq(schema.suppliers.isActive, false));
+    }
+
+    if (query.status === 'open_now') {
+      conditions.push(openNowFilter(localHHMM(this.now())));
     }
 
     if (query.facilityType) {
-      const types = query.facilityType.split(',').map((t) => t.trim().toLowerCase());
-      conditions.push(sql`lower(${schema.suppliers.facilityType}) = ANY(${types}::text[])`);
+      const types = query.facilityType.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
+      if (types.length > 0) {
+        conditions.push(facilityTypeFilter(types));
+      }
     }
 
     if (query.building) {
@@ -82,12 +111,7 @@ export class DrizzleSupplierRepository implements SupplierRepository {
       .offset(offset)
       .limit(query.limit);
 
-    let dtos = rows.map((r) => this.toDto(r));
-    if (query.status === 'open_now') {
-      dtos = dtos.filter((s) => s.isOpenNow);
-    }
-
-    return { data: dtos, total };
+    return { data: rows.map((r) => this.toDto(r)), total };
   }
 
   async getFilterOptions(isAdmin: boolean): Promise<{ facilityTypes: string[]; buildings: string[] }> {

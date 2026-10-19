@@ -222,3 +222,20 @@ Direct Reply-To RPC consumer providing decoupled, low-latency supplier verificat
 | **F9.3** | Update supplier info | `PATCH /v1/suppliers/{id}` |
 | **F10.1.1**| Delete supplier by targeted ID | `DELETE /v1/suppliers/{id}` |
 | **F10.1.2**| Bulk delete suppliers by category | `DELETE /v1/suppliers?facilityType=...&confirm=true` |
+
+## 5. Running tests
+
+```
+cd supplier-service && npm ci
+npm test          # unit + in-memory API tests; no database needed
+```
+
+`DrizzleSupplierRepository` (the real SQL) has its own suite that runs against Postgres. It
+skips cleanly when no database is configured, so `npm test` stays green without Docker.
+
+```
+SUPPLIERS_TEST_ADMIN_URL=postgres://suppliers:<SUPPLIERS_DB_PASSWORD>@localhost:5434/postgres npm test
+```
+
+The suite drops and recreates a `suppliers_test` database on the `suppliers-db` container and runs
+the real migrations against it. Your `suppliers_db` data is never touched.

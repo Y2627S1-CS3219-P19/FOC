@@ -102,6 +102,14 @@ workspace), so it installs and tests on its own:
 
     cd supplier-service && npm ci && npm test
 
+The Supplier Service suite that touches real SQL needs a database. Point it at the
+suppliers-db container (it creates and wipes its own suppliers_test database):
+
+    cd supplier-service
+    SUPPLIERS_TEST_ADMIN_URL="postgres://suppliers:$SUPPLIERS_DB_PASSWORD@localhost:5434/postgres" npm test
+
+Without that variable the SQL suite is skipped and the rest of the tests still run.
+
 
 7. GET A TOKEN FOR CURL / POSTMAN
 ---------------------------------
