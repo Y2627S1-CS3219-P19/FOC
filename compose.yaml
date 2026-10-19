@@ -1,5 +1,5 @@
 # Friend on Campus - local stack.  Start everything with:   docker compose up -d --build
-# Web app: http://localhost:5173   Keycloak: http://localhost:8080   Mailpit (fake inbox): http://localhost:8025
+# Web app (via gateway): http://localhost:5173   Keycloak: http://localhost:8080   Mailpit (fake inbox): http://localhost:8025
 # RabbitMQ UI: http://localhost:15672   User API docs: http://localhost:3001/v1/docs   Supplier API docs: http://localhost:3002/v1/docs
 name: foc
 
@@ -212,7 +212,7 @@ services:
       DEBUG_EVENT_QUEUE: ${DEBUG_EVENT_QUEUE:-true}
       INITIAL_CREDIT_BALANCE: 100
       TRUST_PROXY: "1"
-    # No host port: only reachable through the gateway (frontend nginx, /v1/credits and /v1/admin/credits).
+    # No host port: only reachable through the gateway (gateway/nginx.conf, /v1/credits and /v1/admin/credits).
     depends_on:
       credits-db:
         condition: service_healthy
@@ -258,7 +258,7 @@ services:
       AMQP_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       DEBUG_EVENT_QUEUE: ${DEBUG_EVENT_QUEUE:-true}
       TRUST_PROXY: "1"
-    # No host port: only reachable through the gateway (frontend nginx, /v1/orders).
+    # No host port: only reachable through the gateway (gateway/nginx.conf, /v1/orders).
     depends_on:
       orders-db:
         condition: service_healthy
@@ -274,14 +274,25 @@ services:
       <<: *healthcheck-defaults
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3004/health/ready"]
 
-  # ---------- Web app (also acts as the local API gateway) ----------
+  # ---------- Web app (static files only; reached through the gateway) ----------
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+
+  # ---------- API gateway (the only public entry point for the web app and API) ----------
+  gateway:
+    build:
+      context: ./gateway
     ports:
       - "5173:80"
+    # nginx resolves every upstream name at startup, so all of them must be up first.
     depends_on:
+      frontend:
+        condition: service_healthy
       user-service:
         condition: service_healthy
       supplier-service:
@@ -290,6 +301,9 @@ services:
         condition: service_healthy
       order-service:
         condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
 
 volumes:
   keycloak-db-data:
