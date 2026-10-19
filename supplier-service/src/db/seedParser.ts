@@ -1,4 +1,5 @@
 import { parse } from 'csv-parse/sync';
+import { normalizeText } from '../utils/text.js';
 
 export interface SeedSupplierRecord {
   name: string;
@@ -55,11 +56,11 @@ export function parseSeedCsv(csvString: string): SeedSupplierRecord[] {
     const lng = row.Longitude ? parseFloat(row.Longitude) : null;
 
     return {
-      name: row.Name ?? '',
-      facilityType: row.Type ?? '',
-      building: row.Building ?? '',
-      floor: row.Floor ? row.Floor : null,
-      locationDescription: row['Location Description'] ? row['Location Description'] : null,
+      name: normalizeText(row.Name ?? ''),
+      facilityType: normalizeText(row.Type ?? ''),
+      building: normalizeText(row.Building ?? ''),
+      floor: row.Floor ? normalizeText(row.Floor) : null,
+      locationDescription: row['Location Description'] ? normalizeText(row['Location Description']) : null,
       latitude: lat !== null && !isNaN(lat) ? lat : null,
       longitude: lng !== null && !isNaN(lng) ? lng : null,
       opensAt: normalizeCsvTime(row.StartingTime, '09:00'),

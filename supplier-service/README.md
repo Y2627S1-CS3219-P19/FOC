@@ -239,3 +239,14 @@ SUPPLIERS_TEST_ADMIN_URL=postgres://suppliers:<SUPPLIERS_DB_PASSWORD>@localhost:
 
 The suite drops and recreates a `suppliers_test` database on the `suppliers-db` container and runs
 the real migrations against it. Your `suppliers_db` data is never touched.
+
+## 6. Seed data
+
+`data/csv/supplier-seed-data.csv` is loaded on startup (`src/db/seed.ts`). It **must be valid
+UTF-8** — Excel saves CSV as Windows-1252 by default, and a lenient decode would store `�` instead of
+`'` in supplier names and buildings. Choose "CSV UTF-8" when saving. Startup fails with a clear error
+if the file is not UTF-8.
+
+Typographic punctuation (`’ “ –` etc.) is folded to ASCII on import and on
+`POST`/`PATCH`/search input (`src/utils/text.ts`), so the catalogue has one spelling of each
+character and keyword search matches what a keyboard types.

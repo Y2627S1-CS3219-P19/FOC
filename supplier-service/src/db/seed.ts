@@ -11,6 +11,20 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Strict UTF-8 decode. Excel saves CSV as Windows-1252 unless told otherwise, and a lenient
+ * decode would silently turn every 0x92 into U+FFFD, so refuse the file instead.
+ */
+function decodeUtf8(buffer: Buffer, csvPath: string): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    throw new Error(
+      `Seed CSV ${csvPath} is not valid UTF-8. Re-save it as UTF-8 (Excel: "Save as" -> "CSV UTF-8").`
+    );
+  }
+}
+
 export async function runSeed(
   dbInstance?: ReturnType<typeof createDb>['db'],
   customCsvPath?: string
@@ -26,7 +40,7 @@ export async function runSeed(
     return { insertedCount: 0 };
   }
 
-  const csvContent = fs.readFileSync(csvPath, 'utf8');
+  const csvContent = decodeUtf8(fs.readFileSync(csvPath), csvPath);
   const records = parseSeedCsv(csvContent);
   console.log(`Parsed ${records.length} records from CSV.`);
 

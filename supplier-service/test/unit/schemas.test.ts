@@ -103,6 +103,24 @@ describe('Slice 3: Strict Schema Validation & Zero Tags (3NF)', () => {
   });
 
   describe('idParamSchema and bulkDeleteQuerySchema', () => {
+    it('folds typographic punctuation to ASCII so search and uniqueness agree', () => {
+      const created = createSupplierSchema.parse({
+        ...validSupplier,
+        name: 'Prince George’s Park',
+        building: 'Prince George’s Park',
+        locationDescription: 'Near PGP — level 2',
+      });
+      expect(created.name).toBe("Prince George's Park");
+      expect(created.building).toBe("Prince George's Park");
+      expect(created.locationDescription).toBe('Near PGP - level 2');
+
+      const updated = updateSupplierSchema.parse({ building: 'Prince George’s Park' });
+      expect(updated.building).toBe("Prince George's Park");
+
+      const query = listQuerySchema.parse({ search: 'George’s' });
+      expect(query.search).toBe("George's");
+    });
+
     it('validates UUID for idParamSchema', () => {
       expect(idParamSchema.safeParse({ id: '3fa85f64-5717-4562-b3fc-2c963f66afa6' }).success).toBe(true);
       expect(idParamSchema.safeParse({ id: 'not-a-uuid' }).success).toBe(false);
