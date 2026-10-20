@@ -27,6 +27,13 @@ pnpm-debug.log*
 *.pem
 *.key
 
+# Terraform (.terraform.lock.hcl IS committed)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+
 # OS
 .DS_Store
 Thumbs.db
