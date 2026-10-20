@@ -89,6 +89,7 @@ export async function createTestContext(
       debugEventQueue: false,
       initialCreditBalance: 100,
       trustProxy: false,
+      consumerRetryDelayMs: 5_000,
     },
     pool,
     auth: auth as unknown as AppContext['auth'],

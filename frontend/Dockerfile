@@ -8,6 +8,10 @@ COPY user-service/package.json user-service/
 COPY frontend/package.json frontend/
 RUN npm ci --no-audit --no-fund
 COPY frontend frontend
+# Vite reads VITE_* from the environment at build time.
+ARG VITE_KEYCLOAK_URL
+ARG VITE_MAILPIT_URL
+ENV VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL VITE_MAILPIT_URL=$VITE_MAILPIT_URL
 RUN npm run build -w frontend
 
 FROM nginx:1.27.5-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10

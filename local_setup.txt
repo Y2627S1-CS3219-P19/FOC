@@ -159,6 +159,22 @@ Supplier pages return 503
   The Supplier Service cannot reach the User Service to check your session. Confirm
   user-service is healthy: docker compose ps
 
+supplier-service keeps restarting, logs say relation "suppliers" already exists
+  Your suppliers-db volume is from the old (pre-Drizzle) Supplier Service. Reset only it:
+      docker compose rm -sf supplier-service suppliers-db
+      docker volume rm foc_suppliers-db-data
+      docker compose up -d --build
+
+Edited the Keycloak theme or the supplier seed data/photos and nothing changed?
+  They are baked into the keycloak and supplier-service images (no bind mounts, same as
+  on AWS). Rebuild: docker compose up -d --build keycloak supplier-service
+  (Realm changes still also need an empty Keycloak database - see the first item.)
+
+A bad event is stuck in RabbitMQ
+  Consumers retry a failed event 5 times, then move it to a dead-letter queue
+  (credit-service.events.dlq, order-service.credit-events.dlq). Malformed events go there
+  at once. Look at it in the RabbitMQ UI (http://localhost:15672, Queues tab).
+
 "npm test" fails with a connection error
   The stack is not running, or it is still starting. Check "docker compose ps" first.
 

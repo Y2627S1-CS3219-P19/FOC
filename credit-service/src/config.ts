@@ -14,6 +14,7 @@ const EnvSchema = z.object({
   DEBUG_EVENT_QUEUE: z.string().optional().default('false'),
   INITIAL_CREDIT_BALANCE: z.coerce.number().int().min(0).default(100),
   TRUST_PROXY: z.string().optional().default(''),
+  CONSUMER_RETRY_DELAY_MS: z.coerce.number().int().positive().default(5_000),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -36,5 +37,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     debugEventQueue: e.DEBUG_EVENT_QUEUE === 'true',
     initialCreditBalance: e.INITIAL_CREDIT_BALANCE,
     trustProxy: e.TRUST_PROXY ? (Number.isNaN(Number(e.TRUST_PROXY)) ? e.TRUST_PROXY : Number(e.TRUST_PROXY)) : false,
+    consumerRetryDelayMs: e.CONSUMER_RETRY_DELAY_MS,
   };
 }

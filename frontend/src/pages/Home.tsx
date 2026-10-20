@@ -25,9 +25,11 @@ export function HomePage() {
           Every new student starts with credits. They circulate on campus only: they can't be bought, cashed out or sent off-platform. Use
           your @u.nus.edu email to sign up.
         </p>
-        <p className="small muted">
-          Dev: verification and password-reset emails arrive in Mailpit at <a href={MAILPIT_URL}>{MAILPIT_URL}</a>.
-        </p>
+        {MAILPIT_URL && (
+          <p className="small muted">
+            Dev: verification and password-reset emails arrive in Mailpit at <a href={MAILPIT_URL}>{MAILPIT_URL}</a>.
+          </p>
+        )}
       </div>
     );
   }

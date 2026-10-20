@@ -26,6 +26,8 @@ async function main() {
     await runSeed(db);
   } catch (err) {
     console.error('Database connection or initialization error:', err);
+    // Exit instead of serving 500s while looking healthy, so Compose/ECS restart it and a bad deploy rolls back.
+    process.exit(1);
   }
 
   const repository = new DrizzleSupplierRepository(db);
