@@ -8,6 +8,13 @@
       "when": 1790182608402,
       "tag": "0000_gifted_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792394745828,
+      "tag": "0001_fix_replacement_chars",
+      "breakpoints": true
     }
   ]
 }
