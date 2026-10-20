@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "7838dc08-63eb-49f7-84a8-1d7c5a22edb5",
     "name": "FoC Order Service",
-    "description": "All Order Service endpoints, through the gateway (frontend nginx). Run the folders top to bottom, or use the Collection Runner. See postman/DEMO.md for the live demo. Set the usernames and passwords in the collection variables first; the users must exist in Keycloak with a verified email, and adminUsername must have the admin role.",
+    "description": "All Order Service endpoints, through the gateway (gateway/nginx.conf). Run the folders top to bottom, or use the Collection Runner. See postman/DEMO.md for the live demo. Set the usernames and passwords in the collection variables first; the users must exist in Keycloak with a verified email, and adminUsername must have the admin role.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

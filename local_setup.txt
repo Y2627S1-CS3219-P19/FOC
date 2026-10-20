@@ -41,8 +41,8 @@ about a minute to become healthy. Check progress with:
 
     docker compose ps
 
-Wait until every service says "healthy". mailpit and frontend have no healthcheck,
-so they just say "running" - that is fine. If something says "unhealthy", jump to
+Wait until every service says "healthy". mailpit has no healthcheck,
+so it just says "running" - that is fine. If something says "unhealthy", jump to
 section 9.
 
 
@@ -55,7 +55,7 @@ User Service API docs         http://localhost:3001/v1/docs
 Supplier Service API docs     http://localhost:3002/v1/docs
 RabbitMQ management UI        http://localhost:15672  (RABBITMQ_USER / RABBITMQ_PASSWORD from .env)
 
-The web app is also the local API gateway, so the browser only ever talks to
+The gateway container serves the web app and routes API calls, so the browser only ever talks to
 localhost:5173 and localhost:8080.
 
 
@@ -169,10 +169,11 @@ Docker build fails on "npm ci"
 
 10. WHAT IS RUNNING
 -------------------
-  frontend          React web app + local API gateway          port 5173
+  gateway           API gateway (nginx), public entry point    port 5173
+  frontend          React web app (static files)               internal only (via gateway /)
   user-service      accounts, profiles, admin, audit           port 3001
   supplier-service  supplier directory                         port 3002
-  order-service     errand orders and their lifecycle          internal only (via frontend /v1/orders)
+  order-service     errand orders and their lifecycle          internal only (via gateway /v1/orders)
   keycloak          login, passwords, sessions, tokens         port 8080
   users-db          Postgres for the User Service              port 5433
   suppliers-db      Postgres for the Supplier Service          port 5434
