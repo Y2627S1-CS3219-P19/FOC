@@ -1,0 +1,9 @@
+# Build context is ./supplier-service (see compose.yaml), so the root .dockerignore does not apply.
+node_modules
+dist
+.vite
+.env
+.env.*
+!.env.example
+.git
+*.log
