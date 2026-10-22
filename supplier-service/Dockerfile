@@ -21,6 +21,8 @@ COPY --from=builder /app/dist ./dist
 COPY migrations/ ./migrations/
 COPY openapi.yaml ./
 
+USER node
+
 EXPOSE 3002
 CMD ["node", "dist/index.js"]
 

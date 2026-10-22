@@ -102,6 +102,14 @@ workspace), so it installs and tests on its own:
 
     cd supplier-service && npm ci && npm test
 
+Order Service tests need an admin connection to create their own "orders_test"
+database. The compose orders-db uses the "orders" role, so point the tests at a
+throwaway Postgres instead:
+
+    docker run -d --rm --name orders-test-db -e POSTGRES_PASSWORD=test -p 5437:5432 postgres:16-alpine
+    ORDERS_TEST_ADMIN_URL='postgres://postgres:test@localhost:5437/postgres' npm test -w order-service
+    docker rm -f orders-test-db
+
 
 7. GET A TOKEN FOR CURL / POSTMAN
 ---------------------------------
@@ -173,19 +181,21 @@ Docker build fails on "npm ci"
   frontend          React web app (static files)               internal only (via gateway /)
   user-service      accounts, profiles, admin, audit           port 3001
   supplier-service  supplier directory                         port 3002
-  order-service     errand orders and their lifecycle          internal only (via gateway /v1/orders)
+  order-service     errand orders and their lifecycle          internal only (via frontend /v1/orders)
+  credit-service    wallets, reservations, ledger              internal only (via frontend /v1/credits)
   keycloak          login, passwords, sessions, tokens         port 8080
   users-db          Postgres for the User Service              port 5433
   suppliers-db      Postgres for the Supplier Service          port 5434
+  credits-db        Postgres for the Credit Service            port 5435
   orders-db         Postgres for the Order Service             port 5436
   keycloak-db       Postgres for Keycloak                      internal only
   rabbitmq          events between services                    ports 5672 / 15672
   mailpit           catches outgoing email                     port 8025
 
-Credit Service is not finished yet: it does not reserve credits for new orders. For an Order Service
-demo, run its stand-in (order-service/mocks/credit-mock.ts, see order-service/postman/DEMO.md).
+Order and Credit Services have no host port on purpose: the frontend nginx proxies /v1/orders
+and /v1/credits to them, and it returns 404 for /v1/internal/* so service-to-service routes
+are never reachable from the browser.
 
 More detail:
-  README.md   - overview and structure
-  API.md      - every endpoint, request and response
-  AUTH.md     - how Keycloak and the User Service split the work
+  README.md   - overview, structure, how to run
+  AGENTS.md   - repo conventions for coding agents

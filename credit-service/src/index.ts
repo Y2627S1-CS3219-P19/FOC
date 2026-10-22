@@ -45,7 +45,7 @@ async function main() {
 
   // Consumer: subscribe to user.events and order.events
   const consumer = config.amqpUrl
-    ? startEventConsumer({ pool, amqpUrl: config.amqpUrl, logger, initialCreditBalance: config.initialCreditBalance })
+    ? startEventConsumer({ pool, amqpUrl: config.amqpUrl, logger, initialCreditBalance: config.initialCreditBalance, retryDelayMs: config.consumerRetryDelayMs })
     : null;
   if (!consumer) logger.warn('AMQP_URL not set: not consuming events');
 
