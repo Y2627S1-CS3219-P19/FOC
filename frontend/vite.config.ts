@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// `npm run dev` proxies API calls to the services running on the host, mirroring nginx.conf in the container.
+// `npm run dev` proxies API calls to the services running on the host, mirroring gateway/nginx.conf.
 export default defineConfig({
   plugins: [react()],
   server: {

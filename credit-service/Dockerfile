@@ -1,5 +1,5 @@
 # Build context is the repo root (see compose.yaml) so the shared packages can be included.
-FROM node:22.23.3-alpine AS build
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS build
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages/shared-middleware/package.json packages/shared-middleware/
@@ -14,7 +14,7 @@ COPY credit-service credit-service
 RUN npm run build -w @foc/shared-middleware -w @foc/shared-events -w credit-service \
  && npm prune --omit=dev --no-audit --no-fund
 
-FROM node:22.23.3-alpine
+FROM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules node_modules

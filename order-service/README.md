@@ -4,7 +4,7 @@ Errand orders and their lifecycle: a requester posts an order for items from a c
 collects and delivers it, and the requester confirms. Credits are reserved, returned and paid by Credit Service,
 driven by this service's events.
 
-Port **3004**. Own database `orders_db`. Reached only through the gateway (`/v1/orders` in `frontend/nginx.conf`).
+Port **3004**. Own database `orders_db`. Reached only through the gateway (`/v1/orders` in `gateway/nginx.conf`).
 
 ## Status flow
 
@@ -129,7 +129,7 @@ runs without RabbitMQ: events stay in the outbox and credit replies are not cons
 ## How to run
 
 **With the whole stack.** Order Service is in the root `compose.yaml` (`orders-db` on host port 5436, `order-service`
-with no host port) and routed by `frontend/nginx.conf` (`/v1/orders`). Add `ORDERS_DB_PASSWORD` to your `.env`
+with no host port) and routed by `gateway/nginx.conf` (`/v1/orders`). Add `ORDERS_DB_PASSWORD` to your `.env`
 (see the root `.env.example`), then from the repo root:
 
 ```bash
