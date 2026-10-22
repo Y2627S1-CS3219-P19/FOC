@@ -19,11 +19,13 @@ async function main() {
   let isDbReady = false;
   try {
     await client`SELECT 1`;
-    isDbReady = true;
     console.log('Connected to PostgreSQL successfully.');
 
     await runMigrations(db);
     await runSeed(db);
+    // Ready only once the schema and seed are actually in place, so a failed
+    // migration reports 503 instead of a false healthy.
+    isDbReady = true;
   } catch (err) {
     console.error('Database connection or initialization error:', err);
     // Exit instead of serving 500s while looking healthy, so Compose/ECS restart it and a bad deploy rolls back.

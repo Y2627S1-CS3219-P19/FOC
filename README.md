@@ -69,6 +69,11 @@ docker compose up -d --build
 | Supplier Service API docs | http://localhost:3002/v1/docs |
 | RabbitMQ UI | http://localhost:15672 (login: `RABBITMQ_*` from `.env`) |
 
+**Pinned versions.** All image tags are pinned (`postgres:16-alpine`, `keycloak:26.7.4`,
+`rabbitmq:4-management-alpine`, `nginx:1.27-alpine`, `node:22.23.3-alpine`,
+`mailpit:v1.31.3`) so every machine builds the same stack. Bump them on purpose, in their own
+commit, and run the whole stack afterwards — do not switch a tag back to `latest`.
+
 **Auth in one paragraph.** Keycloak is the OAuth 2.0 / OpenID Connect server:
 it shows the login page, stores password hashes and sessions, and issues
 signed access tokens that carry the user's roles (`user` or `admin`). Sign-up

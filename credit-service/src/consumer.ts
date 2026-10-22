@@ -20,6 +20,8 @@ import {
   handleOrderWithdrawn,
   handleOrderCancelled,
   handleOrderExpired,
+  handleOrderRejected,
+  type OrderRejectedPayload,
 } from './handlers/order.js';
 
 export interface ConsumerOptions {
@@ -31,6 +33,8 @@ export interface ConsumerOptions {
 }
 
 export interface EventConsumer {
+  isConnected(): boolean;
+  dlqDepth(): Promise<number | null>;
   stop(): Promise<void>;
 }
 
@@ -54,7 +58,14 @@ const BINDINGS: Array<{ exchange: string; routingKey: string }> = [
   { exchange: EXCHANGES.order, routingKey: 'order.withdrawn' },
   { exchange: EXCHANGES.order, routingKey: 'order.cancelled' },
   { exchange: EXCHANGES.order, routingKey: 'order.expired' },
+  { exchange: EXCHANGES.order, routingKey: 'order.rejected' },
 ];
+
+/** What to do after a failed attempt: try again later, or give up and dead-letter it. */
+export function afterFailure(previousAttempts: number): { attempt: number; deadLetter: boolean } {
+  const attempt = previousAttempts + 1;
+  return { attempt, deadLetter: attempt >= MAX_ATTEMPTS };
+}
 
 export function startEventConsumer(options: ConsumerOptions): EventConsumer {
   const { pool, amqpUrl, logger, initialCreditBalance, retryDelayMs } = options;
@@ -65,14 +76,25 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
   async function connect(): Promise<ConfirmChannel> {
     if (channel) return channel;
 
-    connection = await amqp.connect(amqpUrl);
-    connection.on('error', (err) => logger.warn({ err }, 'RabbitMQ consumer connection error'));
-    connection.on('close', () => {
-      if (stopped) return;
-      logger.warn('RabbitMQ consumer connection closed; will reconnect');
-      connection = null;
-      channel = null;
-      setTimeout(() => { void setup(); }, 5_000);
+  /** Copies the message to the retry queue or the DLQ, waits for RabbitMQ to confirm, then acks the original. */
+  async function onFailure(ch: ConfirmChannel, msg: ConsumeMessage, error: string, eventId: string | undefined, giveUp = false) {
+    const headers = msg.properties.headers ?? {};
+    const next = afterFailure(Number(headers['x-attempts'] ?? 0));
+    const attempt = next.attempt;
+    const deadLetter = giveUp || next.deadLetter;
+    const target = deadLetter ? DEAD_LETTER_QUEUE : RETRY_QUEUE;
+    const originalRoutingKey = String(headers['x-original-routing-key'] ?? msg.fields.routingKey);
+    ch.sendToQueue(target, msg.content, {
+      persistent: true,
+      contentType: msg.properties.contentType,
+      messageId: msg.properties.messageId,
+      expiration: deadLetter ? undefined : String(retryDelayMs),
+      headers: {
+        ...headers,
+        'x-attempts': attempt,
+        'x-last-error': error.slice(0, 500),
+        'x-original-routing-key': originalRoutingKey,
+      },
     });
 
     const ch = await connection.createConfirmChannel();
@@ -171,6 +193,9 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
         case 'OrderExpired':
           await handleOrderExpired(client, envelope as EventEnvelope<OrderExpiredPayload>, logger);
           break;
+        case 'OrderRejected':
+          await handleOrderRejected(client, envelope as EventEnvelope<OrderRejectedPayload>, logger);
+          break;
         default:
           logger.warn({ type: envelope.type }, 'Unknown event type; recording as processed');
       }
@@ -201,15 +226,48 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
   async function setup(): Promise<void> {
     if (stopped) return;
     try {
-      const ch = await connect();
-      await ch.consume(QUEUE_NAME, (msg) => {
+      connection = await amqp.connect(amqpUrl);
+      connection.on('error', (err) => logger.warn({ err: err.message }, 'RabbitMQ consumer connection error'));
+      connection.on('close', () => {
+        channel = null;
+        connection = null;
+        if (!stopped) logger.warn('RabbitMQ consumer connection closed; reconnecting');
+        retryLater();
+      });
+
+      const ch = await connection.createConfirmChannel();
+      await ch.prefetch(1);
+
+      // Assert exchanges (idempotent — they may already exist from the producing service).
+      for (const binding of BINDINGS) {
+        await ch.assertExchange(binding.exchange, 'topic', { durable: true });
+      }
+
+      // Declare the consumer queue and bind to routing keys.
+      await ch.assertQueue(QUEUE, { durable: true });
+      await ch.assertQueue(RETRY_QUEUE, {
+        durable: true,
+        arguments: { 'x-dead-letter-exchange': '', 'x-dead-letter-routing-key': QUEUE },
+      });
+      await ch.assertQueue(DEAD_LETTER_QUEUE, { durable: true });
+
+      for (const binding of BINDINGS) {
+        await ch.bindQueue(QUEUE, binding.exchange, binding.routingKey);
+      }
+
+      await ch.consume(QUEUE, (msg) => {
         if (msg) void handleMessage(ch, msg);
       });
+
+      channel = ch;
+      logger.info(
+        { queue: QUEUE, retryQueue: RETRY_QUEUE, deadLetterQueue: DEAD_LETTER_QUEUE },
+        'RabbitMQ consumer connected',
+      );
     } catch (err) {
       logger.error({ err: (err as Error).message }, 'Failed to start consumer; retrying in 5s');
       connection = null;
-      channel = null;
-      setTimeout(() => { void setup(); }, 5_000);
+      retryLater();
     }
   }
 
@@ -217,6 +275,11 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
   void setup();
 
   return {
+    isConnected: () => channel !== null,
+    async dlqDepth() {
+      if (!channel) return null;
+      return (await channel.checkQueue(DEAD_LETTER_QUEUE)).messageCount;
+    },
     async stop() {
       stopped = true;
       await channel?.close().catch(() => undefined);

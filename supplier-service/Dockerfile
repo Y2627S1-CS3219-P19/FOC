@@ -25,5 +25,7 @@ COPY supplier-service/openapi.yaml ./
 COPY data/csv/ ./data/csv/
 COPY data/images/ ./data/images/
 
+USER node
+
 EXPOSE 3002
 CMD ["node", "dist/index.js"]
