@@ -32,9 +32,11 @@ export function RegisterPage() {
       <div className="card stack">
         <h1>Check your email</h1>
         <p>{done}</p>
-        <p className="muted">
-          Dev: open Mailpit at <a href={MAILPIT_URL} target="_blank" rel="noreferrer">{MAILPIT_URL}</a> and click the link.
-        </p>
+        {MAILPIT_URL && (
+          <p className="muted">
+            Dev: open Mailpit at <a href={MAILPIT_URL} target="_blank" rel="noreferrer">{MAILPIT_URL}</a> and click the link.
+          </p>
+        )}
         <button className="primary" onClick={() => login('/profile')}>
           Log in
         </button>

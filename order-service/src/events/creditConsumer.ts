@@ -1,7 +1,7 @@
 import amqp, { type ChannelModel, type ConfirmChannel, type ConsumeMessage } from 'amqplib';
 import type pg from 'pg';
 import type { Logger } from 'pino';
-import { CREDIT_EVENTS, EXCHANGES, type CreditsReservedPayload, type EventEnvelope } from '@foc/shared-events';
+import { CREDIT_EVENTS, EXCHANGES, parseEnvelope, type CreditsReservedPayload, type EventEnvelope } from '@foc/shared-events';
 import { withTransaction } from '../db.js';
 import { applyTransition } from '../services/transitionService.js';
 import { CREDIT_RESERVATION_FAILED, type CreditReservationFailedPayload } from './localEvents.js';
@@ -149,16 +149,15 @@ export function startCreditConsumer(options: CreditConsumerOptions): CreditConsu
   }
 
   async function onMessage(ch: ConfirmChannel, msg: ConsumeMessage) {
-    let envelope: EventEnvelope;
-    try {
-      envelope = JSON.parse(msg.content.toString()) as EventEnvelope;
-    } catch {
-      // Retrying cannot fix bad JSON: straight to the DLQ.
-      await onFailure(ch, msg, 'Message is not valid JSON', undefined, true).catch((err) =>
+    const parsed = parseEnvelope(msg.content.toString());
+    if (!parsed.ok) {
+      // Retrying cannot fix a malformed message: straight to the DLQ.
+      await onFailure(ch, msg, parsed.error, parsed.eventId, true).catch((err) =>
         logger.error({ err: (err as Error).message }, 'Could not dead-letter a credit event'),
       );
       return;
     }
+    const { envelope } = parsed;
     try {
       await handleCreditEvent(pool, envelope, logger);
       ch.ack(msg);

@@ -15,6 +15,7 @@ const EnvSchema = z.object({
   INITIAL_CREDIT_BALANCE: z.coerce.number().int().min(0).default(100),
   CONSUMER_RETRY_DELAY_MS: z.coerce.number().int().positive().default(5_000),
   TRUST_PROXY: z.string().optional().default(''),
+  CONSUMER_RETRY_DELAY_MS: z.coerce.number().int().positive().default(5_000),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -38,5 +39,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     initialCreditBalance: e.INITIAL_CREDIT_BALANCE,
     consumerRetryDelayMs: e.CONSUMER_RETRY_DELAY_MS,
     trustProxy: e.TRUST_PROXY ? (Number.isNaN(Number(e.TRUST_PROXY)) ? e.TRUST_PROXY : Number(e.TRUST_PROXY)) : false,
+    consumerRetryDelayMs: e.CONSUMER_RETRY_DELAY_MS,
   };
 }

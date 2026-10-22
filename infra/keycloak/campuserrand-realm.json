@@ -26,13 +26,15 @@
   "actionTokenGeneratedByAdminLifespan": 86400,
   "browserFlow": "browser single session",
   "smtpServer": {
-    "host": "mailpit",
-    "port": "1025",
-    "from": "noreply@foc.local",
+    "host": "${KC_SMTP_HOST}",
+    "port": "${KC_SMTP_PORT}",
+    "from": "${KC_SMTP_FROM}",
     "fromDisplayName": "Friend on Campus",
-    "ssl": "false",
-    "starttls": "false",
-    "auth": "false"
+    "ssl": "${KC_SMTP_SSL}",
+    "starttls": "${KC_SMTP_STARTTLS}",
+    "auth": "${KC_SMTP_AUTH}",
+    "user": "${KC_SMTP_USER}",
+    "password": "${KC_SMTP_PASSWORD}"
   },
   "roles": {
     "realm": [
@@ -94,16 +96,16 @@
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "http://localhost:5173/*"
+        "${KC_SPA_PUBLIC_URL}/*"
       ],
       "webOrigins": [
-        "http://localhost:5173"
+        "${KC_SPA_PUBLIC_URL}"
       ],
-      "rootUrl": "http://localhost:5173",
+      "rootUrl": "${KC_SPA_PUBLIC_URL}",
       "baseUrl": "/",
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:5173/*"
+        "post.logout.redirect.uris": "${KC_SPA_PUBLIC_URL}/*"
       },
       "defaultClientScopes": [
         "web-origins",

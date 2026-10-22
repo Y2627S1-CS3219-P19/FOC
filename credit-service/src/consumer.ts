@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import {
   EXCHANGES,
+  parseEnvelope,
   type EventEnvelope,
   type UserRegisteredPayload,
   type OrderCreatedPayload,
@@ -37,10 +38,18 @@ export interface EventConsumer {
   stop(): Promise<void>;
 }
 
-const QUEUE = 'credit-service.events';
-const RETRY_QUEUE = `${QUEUE}.retry`;
-export const DEAD_LETTER_QUEUE = `${QUEUE}.dlq`;
+const QUEUE_NAME = 'credit-service.events';
+/** Failed messages wait here, then RabbitMQ moves them back to QUEUE_NAME (dead-letter routing on expiry). */
+const RETRY_QUEUE = `${QUEUE_NAME}.retry`;
+/** Messages that failed MAX_ATTEMPTS times or are malformed. Nothing reads it: a person checks the RabbitMQ UI. */
+export const DEAD_LETTER_QUEUE = `${QUEUE_NAME}.dlq`;
 export const MAX_ATTEMPTS = 5;
+
+/** What to do after a failed attempt: try again later, or give up and dead-letter it. */
+export function afterFailure(previousAttempts: number): { attempt: number; deadLetter: boolean } {
+  const attempt = previousAttempts + 1;
+  return { attempt, deadLetter: attempt >= MAX_ATTEMPTS };
+}
 
 const BINDINGS: Array<{ exchange: string; routingKey: string }> = [
   { exchange: EXCHANGES.user, routingKey: 'user.registered' },
@@ -64,9 +73,8 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
   let channel: ConfirmChannel | null = null;
   let stopped = false;
 
-  const retryLater = () => {
-    if (!stopped) setTimeout(() => void setup(), 5_000);
-  };
+  async function connect(): Promise<ConfirmChannel> {
+    if (channel) return channel;
 
   /** Copies the message to the retry queue or the DLQ, waits for RabbitMQ to confirm, then acks the original. */
   async function onFailure(ch: ConfirmChannel, msg: ConsumeMessage, error: string, eventId: string | undefined, giveUp = false) {
@@ -88,30 +96,67 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
         'x-original-routing-key': originalRoutingKey,
       },
     });
+
+    const ch = await connection.createConfirmChannel();
+    await ch.prefetch(1);
+
+    // Assert exchanges (idempotent — they may already exist from the producing service).
+    for (const binding of BINDINGS) {
+      await ch.assertExchange(binding.exchange, 'topic', { durable: true });
+    }
+
+    // Declare the consumer queue and bind to routing keys.
+    await ch.assertQueue(QUEUE_NAME, { durable: true });
+    await ch.assertQueue(RETRY_QUEUE, {
+      durable: true,
+      arguments: { 'x-dead-letter-exchange': '', 'x-dead-letter-routing-key': QUEUE_NAME },
+    });
+    await ch.assertQueue(DEAD_LETTER_QUEUE, { durable: true });
+    for (const binding of BINDINGS) {
+      await ch.bindQueue(QUEUE_NAME, binding.exchange, binding.routingKey);
+    }
+
+    channel = ch;
+    logger.info({ queue: QUEUE_NAME, retryQueue: RETRY_QUEUE, deadLetterQueue: DEAD_LETTER_QUEUE }, 'RabbitMQ consumer connected');
+    return ch;
+  }
+
+  /** Copies the message to the retry queue or the DLQ, waits for RabbitMQ to confirm, then acks the original. */
+  async function onFailure(ch: ConfirmChannel, msg: ConsumeMessage, error: string, eventId: string | undefined, giveUp = false) {
+    const headers = msg.properties.headers ?? {};
+    const next = afterFailure(Number(headers['x-attempts'] ?? 0));
+    const deadLetter = giveUp || next.deadLetter;
+    // After a retry the message comes back with the queue name as routing key, so keep the first one.
+    const originalRoutingKey = String(headers['x-original-routing-key'] ?? msg.fields.routingKey);
+    ch.sendToQueue(deadLetter ? DEAD_LETTER_QUEUE : RETRY_QUEUE, msg.content, {
+      persistent: true,
+      contentType: msg.properties.contentType,
+      messageId: msg.properties.messageId,
+      expiration: deadLetter ? undefined : String(retryDelayMs),
+      headers: {
+        ...headers,
+        'x-attempts': next.attempt,
+        'x-last-error': error.slice(0, 500),
+        'x-original-routing-key': originalRoutingKey,
+      },
+    });
     await ch.waitForConfirms();
     ch.ack(msg);
-    const fields = {
-      eventId,
-      routingKey: originalRoutingKey,
-      attempt,
-      maxAttempts: MAX_ATTEMPTS,
-      err: error,
-      correlationId: headers['x-correlation-id'],
-    };
+    const fields = { eventId, routingKey: originalRoutingKey, attempt: next.attempt, maxAttempts: MAX_ATTEMPTS, err: error };
     if (deadLetter) logger.error({ ...fields, queue: DEAD_LETTER_QUEUE }, 'Message dead-lettered');
     else logger.warn({ ...fields, retryInMs: retryDelayMs }, 'Retry scheduled');
   }
 
   async function handleMessage(ch: ConfirmChannel, msg: ConsumeMessage): Promise<void> {
-    let envelope: EventEnvelope;
-    try {
-      envelope = JSON.parse(msg.content.toString()) as EventEnvelope;
-    } catch {
-      await onFailure(ch, msg, 'Message is not valid JSON', undefined, true).catch((err) =>
+    const parsed = parseEnvelope(msg.content.toString());
+    if (!parsed.ok) {
+      // Retrying cannot fix a malformed message: straight to the DLQ.
+      await onFailure(ch, msg, parsed.error, parsed.eventId, true).catch((err) =>
         logger.error({ err: (err as Error).message }, 'Could not dead-letter an event'),
       );
       return;
     }
+    const { envelope } = parsed;
 
     const client = await pool.connect();
     try {
@@ -166,8 +211,8 @@ export function startEventConsumer(options: ConsumerOptions): EventConsumer {
       logger.info({ eventId: envelope.eventId, type: envelope.type }, 'Event processed');
     } catch (err) {
       await client.query('ROLLBACK').catch(() => undefined);
-      logger.error({ err: (err as Error).message, eventId: envelope.eventId, type: envelope.type }, 'Event processing failed');
       await onFailure(ch, msg, (err as Error).message, envelope.eventId).catch((sendErr) => {
+        // Could not reach the retry queue either: put it back on the main queue as the last resort.
         logger.error({ eventId: envelope.eventId, err: (sendErr as Error).message }, 'Could not schedule a retry; requeued');
         ch.nack(msg, false, true);
       });
