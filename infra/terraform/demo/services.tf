@@ -91,9 +91,9 @@ module "keycloak" {
 
     # Filled into campuserrand-realm.json on the first import (empty keycloak database).
     KC_SPA_PUBLIC_URL = local.public_url
-    KC_SMTP_HOST      = "email-smtp.${var.region}.amazonaws.com"
-    KC_SMTP_PORT      = "587"
-    KC_SMTP_FROM      = var.ses_from_address
+    KC_SMTP_HOST      = var.smtp_host # Gmail; see variables.tf for why not SES
+    KC_SMTP_PORT      = var.smtp_port
+    KC_SMTP_FROM      = var.email_from_address
     KC_SMTP_SSL       = "false"
     KC_SMTP_STARTTLS  = "true"
     KC_SMTP_AUTH      = "true"

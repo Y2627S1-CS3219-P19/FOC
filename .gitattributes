@@ -1,0 +1,4 @@
+# Scripts that run inside Linux containers keep LF line endings on every OS. Terraform also hashes
+# them into the foc-admin task definition, so CRLF on Windows vs LF in CI would show a fake diff.
+infra/terraform/scripts/*.sh  text eol=lf
+infra/terraform/scripts/*.sql text eol=lf
