@@ -1,0 +1,172 @@
+# PR pipeline (cicd-plan.txt section 2): test only what changed, then one gate job (ci-ok) that branch
+# protection requires. Needs no AWS access. Third-party actions are pinned to full commit SHAs.
+name: PR
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists the PR's changed files through the API
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          # One filter per image (cicd-plan.txt section 1). "shared" = files every image depends on.
+          filters: |
+            shared: &shared
+              - .github/workflows/**
+              - package.json
+              - '*/package.json'
+              - tsconfig.base.json
+              - compose.yaml
+              - .env.example
+            workspace: &workspace
+              - packages/**
+              - package-lock.json
+            user-service: [*shared, *workspace, 'user-service/**']
+            credit-service: [*shared, *workspace, 'credit-service/**']
+            order-service: [*shared, *workspace, 'order-service/**']
+            frontend: [*shared, *workspace, 'frontend/**']
+            supplier-service: [*shared, 'supplier-service/**', 'data/**']
+            gateway: [*shared, 'gateway/**']
+            keycloak: [*shared, 'infra/keycloak/**']
+      - id: matrix
+        env:
+          CHANGES: ${{ steps.filter.outputs.changes }}
+        # How to test each image. deps = compose services its tests need on the local dev ports.
+        run: |
+          jq -nc --argjson changes "$CHANGES" '
+            {
+              "user-service":     {kind: "node", deps: "users-db keycloak mailpit", context: ".", dockerfile: "user-service/Dockerfile"},
+              "credit-service":   {kind: "node", deps: "credits-db", context: ".", dockerfile: "credit-service/Dockerfile"},
+              "order-service":    {kind: "node", deps: "orders-db", context: ".", dockerfile: "order-service/Dockerfile"},
+              "frontend":         {kind: "frontend", deps: "", context: ".", dockerfile: "frontend/Dockerfile"},
+              "supplier-service": {kind: "supplier", deps: "", context: ".", dockerfile: "supplier-service/Dockerfile"},
+              "gateway":          {kind: "gateway", deps: "", context: "gateway", dockerfile: "gateway/Dockerfile"},
+              "keycloak":         {kind: "keycloak", deps: "", context: "infra/keycloak", dockerfile: "infra/keycloak/Dockerfile"}
+            }
+            | to_entries
+            | map(select(.key as $k | $changes | index($k)))
+            | map({image: .key} + .value)
+            | {include: .}
+          ' > matrix.json
+          cat matrix.json
+          echo "matrix=$(cat matrix.json)" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.matrix != '{"include":[]}'
+    name: test (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    env:
+      # order-service tests create a throwaway orders_test database; the password is the .env.example value.
+      ORDERS_TEST_ADMIN_URL: postgres://orders:change-me-orders-db@localhost:5436/postgres
+      TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - if: contains(fromJSON('["node","frontend","supplier"]'), matrix.kind)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.kind == 'supplier' && 'supplier-service/package-lock.json' || 'package-lock.json' }}
+
+      # The .env.example placeholders are fine as throwaway CI passwords. Tests read this file too.
+      - run: cp .env.example .env
+
+      - name: Start test dependencies
+        if: matrix.deps != ''
+        run: docker compose up -d --wait ${{ matrix.deps }}
+
+      - name: Install, typecheck, test (workspace service)
+        if: matrix.kind == 'node'
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:packages
+          npm run typecheck -w ${{ matrix.image }}
+          npm test -w ${{ matrix.image }}
+
+      - name: Install, typecheck, build (frontend has no tests yet)
+        if: matrix.kind == 'frontend'
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:packages
+          npm run build -w frontend
+
+      - name: Install, typecheck, test (supplier-service, not a workspace)
+        if: matrix.kind == 'supplier'
+        working-directory: supplier-service
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm run build
+          npm test
+
+      - name: Docker build
+        run: docker build -t foc-ci/${{ matrix.image }} -f ${{ matrix.dockerfile }} ${{ matrix.context }}
+
+      # nginx -t resolves every upstream name, so map them to localhost for the syntax check.
+      - name: Check nginx config
+        if: matrix.kind == 'gateway'
+        run: >
+          docker run --rm
+          --add-host user-service:127.0.0.1 --add-host supplier-service:127.0.0.1
+          --add-host credit-service:127.0.0.1 --add-host order-service:127.0.0.1
+          --add-host frontend:127.0.0.1
+          foc-ci/gateway nginx -t
+
+      # Fails only on CRITICAL vulnerabilities that have a fix (cicd-plan.txt section 5).
+      - name: Trivy (fail on fixable CRITICAL)
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" -v "$PWD/.trivyignore:/.trivyignore:ro" \
+            "$TRIVY_IMAGE" image --no-progress --ignorefile /.trivyignore \
+            --severity CRITICAL --ignore-unfixed --exit-code 1 foc-ci/${{ matrix.image }}
+
+      - name: Trivy report (HIGH and CRITICAL, to the job summary)
+        if: always()
+        run: |
+          {
+            echo "### Trivy: ${{ matrix.image }}"
+            echo '```'
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$HOME/.cache/trivy:/root/.cache/trivy" -v "$PWD/.trivyignore:/.trivyignore:ro" \
+              "$TRIVY_IMAGE" image --no-progress --ignorefile /.trivyignore \
+              --severity HIGH,CRITICAL --exit-code 0 foc-ci/${{ matrix.image }}
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dependency logs on failure
+        if: failure() && matrix.deps != ''
+        run: docker compose logs --no-color ${{ matrix.deps }}
+
+  # The only required status check. Skipped jobs count as passed, so docs-only PRs stay green.
+  ci-ok:
+    needs: [changes, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "All required checks passed or were skipped."

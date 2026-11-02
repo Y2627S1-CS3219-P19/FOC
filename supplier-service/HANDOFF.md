@@ -2,7 +2,7 @@
 
 ## 1. Context & Repository State
 * **Current Service**: [`supplier-service/`](file:///Users/keaharvan/Documents/University/y4s1/cs3219/FOC/supplier-service/)
-* **Integration Target Branch**: `staging` (all future PRs merge to `staging` before `main`).
+* **Integration Target Branch**: `main` (branch from `main`, PR into `main`; no staging branch).
 * **Merged Upstream PRs**:
   * [PR #4](https://github.com/Y2627S1-CS3219-P19/FOC/pull/4): Fastify 5 backend with 3NF Drizzle ORM and test suite.
   * [PR #7](https://github.com/Y2627S1-CS3219-P19/FOC/pull/7): Automated startup database migrations, idempotent seeding, and container optimizations.
@@ -105,8 +105,8 @@ npm run demo
 # 4. Run interactive TUI demo (persona toggling, manual keypresses)
 npm run demo:interactive
 
-# 5. Build isolated Docker container from scratch (<2s)
-docker build --no-cache -t supplier-service:test .
+# 5. Build isolated Docker container from scratch (run from the repo root: the image includes data/)
+cd .. && docker build --no-cache -f supplier-service/Dockerfile -t supplier-service:test .
 ```
 
 ---

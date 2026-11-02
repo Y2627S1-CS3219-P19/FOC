@@ -66,6 +66,7 @@ npm test
 # Build TypeScript
 npm run build
 
-# Build isolated Docker container (<8s)
-docker build --no-cache -t supplier-service:test .
+# Build isolated Docker container. The build context is the repo root (the image includes data/).
+cd ..
+docker build --no-cache -f supplier-service/Dockerfile -t supplier-service:test .
 ```
