@@ -4,7 +4,9 @@ import { useAuth, userManager } from './auth';
 import { DebugStrip, RequireAdmin, RequireLogin } from './components';
 import { useWallet } from './errands';
 import { AdminRoleChangesPage } from './pages/AdminRoleChanges';
+import { AdminAuditPage } from './pages/AdminAudit';
 import { AdminCreditsPage } from './pages/AdminCredits';
+import { AdminOrdersPage } from './pages/AdminOrders';
 import { AdminUsersPage } from './pages/AdminUsers';
 import { BoardPage } from './pages/Board';
 import { CreditsPage } from './pages/Credits';
@@ -116,6 +118,12 @@ export function App() {
               <NavLink to="/admin/credits" onClick={close}>
                 Admin: credits
               </NavLink>
+              <NavLink to="/admin/orders" onClick={close}>
+                Admin: orders
+              </NavLink>
+              <NavLink to="/admin/audit" onClick={close}>
+                Admin: audit log
+              </NavLink>
             </>
           )}
           {user && <CreditPill />}
@@ -152,6 +160,8 @@ export function App() {
           <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
           <Route path="/admin/role-changes" element={<RequireAdmin><AdminRoleChangesPage /></RequireAdmin>} />
           <Route path="/admin/credits" element={<RequireAdmin><AdminCreditsPage /></RequireAdmin>} />
+          <Route path="/admin/orders" element={<RequireAdmin><AdminOrdersPage /></RequireAdmin>} />
+          <Route path="/admin/audit" element={<RequireAdmin><AdminAuditPage /></RequireAdmin>} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </main>

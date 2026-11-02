@@ -5,6 +5,7 @@ import { historyToApi, toApi } from '../domain/order.js';
 import type { Page } from '../repositories/orderRepository.js';
 import type { OrderRow } from '../domain/order.js';
 import {
+  adminOrdersQuerySchema,
   byUserQuerySchema,
   createOrderSchema,
   idParamSchema,
@@ -49,6 +50,11 @@ export function orderController(ctx: AppContext) {
       const { userId } = parseOrThrow(userIdParamSchema, req.params);
       const q = parseOrThrow(byUserQuerySchema, req.query);
       sendPage(res, await orders.listByUser(ctx, userId, q), q);
+    },
+
+    async listAll(req: Request, res: Response) {
+      const q = parseOrThrow(adminOrdersQuerySchema, req.query);
+      sendPage(res, await orders.listAll(ctx, q), q);
     },
 
     async get(req: Request, res: Response) {

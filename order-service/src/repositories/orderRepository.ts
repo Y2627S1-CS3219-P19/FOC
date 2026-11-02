@@ -1,6 +1,6 @@
 import type { Queryable } from '../db.js';
 import type { HistoryRow, OrderRow, OrderStatus } from '../domain/order.js';
-import type { ByUserQuery, ListOpenQuery, MineQuery } from '../schemas.js';
+import type { AdminOrdersQuery, ByUserQuery, ListOpenQuery, MineQuery } from '../schemas.js';
 
 export interface NewOrder {
   id: string;
@@ -147,6 +147,14 @@ export async function listMine(db: Queryable, userId: string, q: MineQuery): Pro
 export async function listByUser(db: Queryable, userId: string, q: ByUserQuery): Promise<Page<OrderRow>> {
   const w = whereBuilder();
   w.add((p) => `(requester_id = ${p} OR runner_id = ${p})`, userId);
+  if (q.status) w.add((p) => `status = ${p}`, q.status);
+  return page(db, w.clause(), w.params, 'created_at DESC, id', q);
+}
+
+/** Admin view: every order, optionally narrowed to one status and/or one user (as requester or runner). */
+export async function listAll(db: Queryable, q: AdminOrdersQuery): Promise<Page<OrderRow>> {
+  const w = whereBuilder();
+  if (q.userId) w.add((p) => `(requester_id = ${p} OR runner_id = ${p})`, q.userId);
   if (q.status) w.add((p) => `status = ${p}`, q.status);
   return page(db, w.clause(), w.params, 'created_at DESC, id', q);
 }
