@@ -97,6 +97,22 @@ jobs:
         if: matrix.deps != ''
         run: docker compose up -d --wait ${{ matrix.deps }}
 
+      # Keycloak reports healthy a few seconds before its token endpoint stops answering 503.
+      - name: Wait for Keycloak to issue tokens
+        if: contains(matrix.deps, 'keycloak')
+        run: |
+          secret=$(grep '^KC_USER_SERVICE_CLIENT_SECRET=' .env | cut -d= -f2-)
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+              http://localhost:8080/realms/campuserrand/protocol/openid-connect/token \
+              -d grant_type=client_credentials -d client_id=user-service \
+              --data-urlencode "client_secret=$secret")
+            [ "$code" = 200 ] && exit 0
+            echo "attempt $i: token endpoint returned $code"
+            sleep 2
+          done
+          exit 1
+
       - name: Install, typecheck, test (workspace service)
         if: matrix.kind == 'node'
         run: |
@@ -122,6 +138,7 @@ jobs:
           npm test
 
       - name: Docker build
+        id: build
         run: docker build -t foc-ci/${{ matrix.image }} -f ${{ matrix.dockerfile }} ${{ matrix.context }}
 
       # nginx -t resolves every upstream name, so map them to localhost for the syntax check.
@@ -144,7 +161,7 @@ jobs:
             --severity CRITICAL --ignore-unfixed --exit-code 1 foc-ci/${{ matrix.image }}
 
       - name: Trivy report (HIGH and CRITICAL, to the job summary)
-        if: always()
+        if: always() && steps.build.outcome == 'success'
         run: |
           {
             echo "### Trivy: ${{ matrix.image }}"
