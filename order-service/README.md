@@ -30,6 +30,7 @@ Responses: `{ data }`, lists `{ data, page, limit, total }`, errors `{ error: { 
 | GET    | `/v1/orders`                                   | any user                                 | OPEN, unexpired orders from other people                              |
 | GET    | `/v1/orders/mine?as=requester\|runner&status=` | caller                                   | the caller's orders in that role                                      |
 | GET    | `/v1/orders/by-user/:userId?status=`           | admin                                    | orders where the user is requester or runner                          |
+| GET    | `/v1/admin/orders?status=&userId=`             | admin                                    | every order, newest first; both filters optional                      |
 | GET    | `/v1/orders/:id`                               | requester, runner, admin; OPEN: any user | order + `requester` / `runner` summaries                              |
 | GET    | `/v1/orders/:id/timeline`                      | requester, runner, admin                 | status history                                                        |
 | POST   | `/v1/orders/:id/accept`                        | anyone except the requester              | OPEN → ACCEPTED                                                       |

@@ -190,6 +190,42 @@ describe('GET /v1/orders/by-user/:userId', () => {
   });
 });
 
+describe('GET /v1/admin/orders', () => {
+  it('admin sees every order, newest first', async () => {
+    const a = await insertOrder(ctx, { requesterId: REQ });
+    const b = await insertOrder(ctx, { requesterId: OTHER, runnerId: REQ, status: 'ACCEPTED' });
+    const c = await insertOrder(ctx, { requesterId: OTHER });
+    const res = await request(api).get('/v1/admin/orders').set(as(ADMIN, 'user,admin'));
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+    expect(res.body.data.map((o: { id: string }) => o.id).sort()).toEqual([a, b, c].sort());
+  });
+
+  it('filters by status and by user (as requester or runner)', async () => {
+    const a = await insertOrder(ctx, { requesterId: REQ });
+    const b = await insertOrder(ctx, { requesterId: OTHER, runnerId: REQ, status: 'ACCEPTED' });
+    await insertOrder(ctx, { requesterId: OTHER });
+
+    const byStatus = await request(api).get('/v1/admin/orders?status=ACCEPTED').set(as(ADMIN, 'user,admin'));
+    expect(byStatus.body.data.map((o: { id: string }) => o.id)).toEqual([b]);
+
+    const byUser = await request(api).get(`/v1/admin/orders?userId=${REQ}`).set(as(ADMIN, 'user,admin'));
+    expect(byUser.body.data.map((o: { id: string }) => o.id).sort()).toEqual([a, b].sort());
+  });
+
+  it('422 for an unknown status', async () => {
+    const res = await request(api).get('/v1/admin/orders?status=NOPE').set(as(ADMIN, 'user,admin'));
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('403 for a regular user', async () => {
+    const res = await request(api).get('/v1/admin/orders').set(as(REQ));
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('INSUFFICIENT_ROLE');
+  });
+});
+
 describe('GET /v1/orders/:id', () => {
   it('PENDING and REJECTED orders are visible only to the requester and admins', async () => {
     for (const status of ['PENDING', 'REJECTED']) {

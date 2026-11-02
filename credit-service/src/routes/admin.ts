@@ -52,7 +52,7 @@ export function adminRouter(ctx: AppContext): Router {
 
       const [{ rows }, { rows: countRows }] = await Promise.all([
         ctx.pool.query(
-          `SELECT id, reservation_id, type, amount, balance_after, created_at
+          `SELECT id, reservation_id, type, amount, balance_after, reason, created_at
            FROM ledger WHERE ${where} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
           [...params, limit, offset],
         ),
@@ -102,9 +102,9 @@ export function adminRouter(ctx: AppContext): Router {
 
         // Record ADJUSTMENT ledger entry.
         await client.query(
-          `INSERT INTO ledger (id, user_id, reservation_id, type, amount, balance_after)
-           VALUES ($1, $2, NULL, 'ADJUSTMENT', $3, $4)`,
-          [randomUUID(), body.userId, body.amount, newAvailable],
+          `INSERT INTO ledger (id, user_id, reservation_id, type, amount, balance_after, reason)
+           VALUES ($1, $2, NULL, 'ADJUSTMENT', $3, $4, $5)`,
+          [randomUUID(), body.userId, body.amount, newAvailable, body.reason],
         );
 
         return { userId: body.userId, amount: body.amount, reason: body.reason, balanceAfter: newAvailable } as const;
