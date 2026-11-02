@@ -1,0 +1,3 @@
+# Trivy exceptions (used by .github/workflows/pr.yml).
+# Only add a CVE when there is no way to fix it yet. One line each, with the reason and the date:
+#   CVE-2026-12345  # no fixed version of libfoo yet, not reachable from our code - 2026-10-21

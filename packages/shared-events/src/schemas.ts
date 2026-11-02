@@ -32,6 +32,8 @@ export const EVENT_PAYLOAD_SCHEMAS: Record<string, z.ZodTypeAny> = {
   [ORDER_EVENTS.withdrawn.type]: z.object({ orderId: id }),
   [ORDER_EVENTS.cancelled.type]: z.object({ orderId: id, cancelledBy: id }),
   [ORDER_EVENTS.expired.type]: z.object({ orderId: id }),
+  // Defined in order-service (localEvents.ts), not ORDER_EVENTS; credit-service consumes it.
+  OrderRejected: z.object({ orderId: id, requesterId: id, reason: z.string() }),
 
   [CREDIT_EVENTS.walletCreated.type]: z.object({ userId: id, initialBalance: amount }),
   [CREDIT_EVENTS.reserved.type]: z.object({ orderId: id, requesterId: id, amount }),

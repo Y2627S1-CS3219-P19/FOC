@@ -14,7 +14,9 @@ ARG VITE_MAILPIT_URL
 ENV VITE_KEYCLOAK_URL=$VITE_KEYCLOAK_URL VITE_MAILPIT_URL=$VITE_MAILPIT_URL
 RUN npm run build -w frontend
 
-FROM nginx:1.27.5-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+FROM nginx:1.30.6-alpine@sha256:0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949
+# Pick up Alpine security fixes released after the base image was built (Trivy gate in pr.yml).
+RUN apk upgrade --no-cache
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
 EXPOSE 80
