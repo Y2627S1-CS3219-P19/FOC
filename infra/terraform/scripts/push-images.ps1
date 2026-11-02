@@ -15,6 +15,10 @@ $env:AWS_PROFILE = 'nus'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $demo = Join-Path $root 'infra\terraform\demo'
 
+$oldDockerConfig = $env:DOCKER_CONFIG
+$oldDockerHost = $env:DOCKER_HOST
+$tempDockerConfig = Join-Path ([System.IO.Path]::GetTempPath()) "foc-docker-$PID"
+
 Push-Location $root
 try {
   if (git status --porcelain --untracked-files=no) { throw 'Uncommitted changes: an image must match a commit. Commit or stash first.' }
@@ -24,8 +28,20 @@ try {
   $publicUrl = terraform -chdir="$demo" output -raw public_url
   if (-not $registry -or -not $publicUrl) { throw 'Could not read terraform outputs. Has demo/ been applied?' }
 
-  aws ecr get-login-password | docker login --username AWS --password-stdin $registry
-  if ($LASTEXITCODE -ne 0) { throw 'ECR login failed. Logged in? Run: aws sso login --profile nus' }
+  # ECR login without `docker login`. On Windows, Docker Desktop's credential store cannot hold the
+  # ~3 KB ECR token ("The stub received bad data"), and piping it through Windows PowerShell breaks
+  # it (400 Bad Request). So use a throwaway Docker config that holds the login itself, deleted at
+  # the end. The normal ~/.docker setup is not changed.
+  $token = aws ecr get-login-password
+  if ($LASTEXITCODE -ne 0 -or -not $token) { throw 'Could not get an ECR token. Logged in? Run: aws sso login --profile nus' }
+  $env:DOCKER_HOST = (docker context inspect --format '{{.Endpoints.docker.Host}}').Trim() # keep using Docker Desktop's engine
+  New-Item -ItemType Directory -Force $tempDockerConfig | Out-Null
+  $dockerConfigJson = @{
+    auths               = @{ $registry = @{ auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("AWS:$token")) } }
+    cliPluginsExtraDirs = @((Join-Path $HOME '.docker\cli-plugins')) # docker buildx lives here
+  } | ConvertTo-Json -Depth 5
+  [System.IO.File]::WriteAllText((Join-Path $tempDockerConfig 'config.json'), $dockerConfigJson) # no BOM
+  $env:DOCKER_CONFIG = $tempDockerConfig
 
   # docker build arguments per image (same contexts as compose.yaml / pr.yml).
   $builds = [ordered]@{
@@ -56,5 +72,8 @@ try {
   Write-Host ''
   Write-Host "initial_image_tag = $sha"
 } finally {
+  $env:DOCKER_CONFIG = $oldDockerConfig
+  $env:DOCKER_HOST = $oldDockerHost
+  Remove-Item -Recurse -Force $tempDockerConfig -ErrorAction SilentlyContinue # holds the ECR login
   Pop-Location
 }
