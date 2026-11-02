@@ -28,17 +28,25 @@ variable "initial_image_tag" {
   }
 }
 
-# ---- Email (SES) and alerts ------------------------------------------------------------------
+# ---- Email and alerts ------------------------------------------------------------------------
+# Keycloak sends verification / reset emails through Gmail SMTP, not SES: the NUS organisation blocks
+# iam:CreateUser, and SES SMTP credentials can only be made from an IAM user (2026-11-02).
+# The SMTP username + app password are secrets (SSM, put-secrets.ps1), not variables.
 
-variable "ses_from_address" {
-  description = "Sender of Keycloak's verification / reset emails. Terraform asks SES to verify it (click the link AWS emails you)."
+variable "email_from_address" {
+  description = "Sender of Keycloak's emails. With Gmail SMTP this must be the Gmail account that owns the app password."
   type        = string
 }
 
-variable "ses_recipient_addresses" {
-  description = "SES sandbox only delivers to verified addresses: every inbox that must receive mail (each gets a verification email)."
-  type        = list(string)
-  default     = []
+variable "smtp_host" {
+  type    = string
+  default = "smtp.gmail.com"
+}
+
+variable "smtp_port" {
+  description = "587 = STARTTLS."
+  type        = string
+  default     = "587"
 }
 
 variable "alert_email" {

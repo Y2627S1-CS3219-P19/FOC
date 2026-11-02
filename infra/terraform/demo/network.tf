@@ -70,7 +70,7 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[count.index].id
 }
 
-# Outbound internet for the private tasks (ECR, CloudWatch Logs, SSM, SES SMTP). A t4g.nano NAT
+# Outbound internet for the private tasks (ECR, CloudWatch Logs, SSM, Gmail SMTP). A t4g.nano NAT
 # instance (~US$5/month) instead of a NAT Gateway (~US$32/month). ha_mode = an Auto Scaling group of 1
 # that replaces the instance if it dies, keeping the same network interface (so routes stay valid).
 module "nat" {

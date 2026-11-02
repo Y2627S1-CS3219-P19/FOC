@@ -1,13 +1,7 @@
 # Copy to terraform.tfvars (gitignored) and fill in. No secrets go in this file.
 
-# Keycloak's emails come from this address. A Gmail address is safer than an @u.nus.edu one: NUS mail
-# servers may reject mail that claims to be from u.nus.edu but was sent by SES.
-ses_from_address = "someone@gmail.com"
-
-# SES sandbox: only these inboxes can receive the verification / reset emails (each must click a link).
-ses_recipient_addresses = [
-  "e0000001@u.nus.edu",
-  "e0000002@u.nus.edu",
-]
+# Keycloak's emails are sent through Gmail SMTP from this address (it must be the Gmail account that
+# owns the app password given to put-secrets.ps1).
+email_from_address = "someone@gmail.com"
 
 alert_email = "e0000001@u.nus.edu"
