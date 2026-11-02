@@ -54,3 +54,16 @@ export interface Supplier {
 export type SupplierInput = Pick<Supplier, 'name' | 'facilityType' | 'building' | 'locationDescription' | 'opensAt' | 'closesAt'> & {
   floor: string | null;
 };
+
+/** One row of the user-service admin audit log. adminId is null for the system (e.g. BOOTSTRAP_ADMIN). */
+export interface AuditEntry {
+  id: string;
+  adminId: string | null;
+  adminUsername: string | null;
+  counterpartAdminId: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}

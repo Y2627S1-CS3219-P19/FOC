@@ -56,6 +56,13 @@ export const byUserQuerySchema = paginationSchema(50)
   .extend({ status: z.enum(ORDER_STATUSES).optional() })
   .strict();
 
+export const adminOrdersQuerySchema = paginationSchema(50)
+  .extend({
+    status: z.enum(ORDER_STATUSES).optional(),
+    userId: z.string().uuid('Not a valid user id.').optional(),
+  })
+  .strict();
+
 export const idParamSchema = z.object({ id: z.string().uuid('Not a valid order id.') });
 export const userIdParamSchema = z.object({ userId: z.string().uuid('Not a valid user id.') });
 
@@ -63,3 +70,4 @@ export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type ListOpenQuery = z.infer<typeof listOpenQuerySchema>;
 export type MineQuery = z.infer<typeof mineQuerySchema>;
 export type ByUserQuery = z.infer<typeof byUserQuerySchema>;
+export type AdminOrdersQuery = z.infer<typeof adminOrdersQuerySchema>;

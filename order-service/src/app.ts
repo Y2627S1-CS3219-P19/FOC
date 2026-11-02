@@ -1,6 +1,7 @@
 import express from 'express';
 import { correlationId, errorHandler, httpLogger, notFoundHandler } from '@foc/shared-middleware';
 import type { AppContext } from './context.js';
+import { adminOrdersRouter } from './routes/adminOrders.js';
 import { healthRouter } from './routes/health.js';
 import { ordersRouter } from './routes/orders.js';
 
@@ -15,6 +16,7 @@ export function createApp(ctx: AppContext) {
 
   app.use(healthRouter(ctx));
   app.use('/v1/orders', ordersRouter(ctx));
+  app.use('/v1/admin/orders', adminOrdersRouter(ctx));
 
   app.use(notFoundHandler);
   app.use(errorHandler(ctx.logger));

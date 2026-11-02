@@ -152,6 +152,33 @@ describe('POST /v1/admin/credits/adjustments', () => {
     expect(rows[0].balance_after).toBe(125);
   });
 
+  it('saves the reason: admin history shows it, other entries have null', async () => {
+    await seedWalletFromPool(ctx, TEST_USER_ID, 100);
+
+    await request(app)
+      .post('/v1/admin/credits/adjustments')
+      .send({ userId: TEST_USER_ID, amount: 5, reason: 'refund for lost order' });
+
+    const res = await request(app).get(`/v1/admin/credits/users/${TEST_USER_ID}/history`);
+    const byType = Object.fromEntries(res.body.data.map((r: { type: string; reason: string | null }) => [r.type, r.reason]));
+    expect(byType.ADJUSTMENT).toBe('refund for lost order');
+    expect(byType.ISSUANCE).toBeNull();
+  });
+
+  it('does not send the reason to the user in their own history', async () => {
+    // The stub auth makes the caller TEST_ADMIN_ID, so /v1/credits/history is that user's own view.
+    await seedWalletFromPool(ctx, TEST_ADMIN_ID, 100);
+
+    await request(app)
+      .post('/v1/admin/credits/adjustments')
+      .send({ userId: TEST_ADMIN_ID, amount: 5, reason: 'secret note' });
+
+    const res = await request(app).get('/v1/credits/history?type=ADJUSTMENT');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0]).not.toHaveProperty('reason');
+  });
+
   it('404 — wallet not found', async () => {
     const res = await request(app)
       .post('/v1/admin/credits/adjustments')

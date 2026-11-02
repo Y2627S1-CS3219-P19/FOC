@@ -212,7 +212,7 @@ paths:
                   data:
                     type: array
                     items:
-                      $ref: '#/components/schemas/LedgerEntry'
+                      $ref: '#/components/schemas/AdminLedgerEntry'
                   pagination:
                     $ref: '#/components/schemas/Pagination'
         '403':
@@ -433,6 +433,16 @@ components:
         created_at:
           type: string
           format: date-time
+
+    AdminLedgerEntry:
+      allOf:
+        - $ref: '#/components/schemas/LedgerEntry'
+        - type: object
+          properties:
+            reason:
+              type: string
+              nullable: true
+              description: Why an admin made an ADJUSTMENT. Null for other types.
 
     Pagination:
       type: object

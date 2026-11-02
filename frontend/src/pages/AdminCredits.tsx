@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useApi, type Page } from '../api';
-import { ErrorBox, Pagination } from '../components';
+import { useCallback, useEffect, useState } from 'react';
+import { useApi } from '../api';
+import { ErrorBox, Pagination, UserPicker } from '../components';
 import { dayAndTime, type LedgerRow } from '../errands';
 import type { AdminUser } from '../types';
 
@@ -28,8 +28,11 @@ interface Reconciliation {
   healthy: boolean;
 }
 
+/** The admin history also carries the reason an admin gave for an ADJUSTMENT. */
+type AdminLedgerRow = LedgerRow & { reason: string | null };
+
 interface History {
-  data: LedgerRow[];
+  data: AdminLedgerRow[];
   pagination: { page: number; limit: number; totalItems: number; totalPages: number };
 }
 
@@ -38,74 +41,6 @@ interface AdjustmentResult {
   amount: number;
   reason: string;
   balanceAfter: number;
-}
-
-/** Inline user search that returns an AdminUser when one is picked. */
-function UserPicker({ label, selected, onSelect }: { label: string; selected: AdminUser | null; onSelect: (u: AdminUser | null) => void }) {
-  const api = useApi();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<AdminUser[]>([]);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
-    const t = setTimeout(() => {
-      const q = new URLSearchParams({ search: query.trim(), limit: '6' });
-      api<Page<AdminUser>>('GET', `/v1/admin/users?${q}`).then((r) => setResults(r.data), () => setResults([]));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [api, query]);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, []);
-
-  if (selected) {
-    return (
-      <div className="stack-tight">
-        <span className="eyebrow">{label}</span>
-        <div className="row">
-          <span><b>{selected.username}</b> <span className="muted">{selected.email}</span></span>
-          <button type="button" className="ghost" onClick={() => { onSelect(null); setQuery(''); }}>Change</button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <label>
-        {label}
-        <input
-          placeholder="Search by username, email or name"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-        />
-      </label>
-      {open && results.length > 0 && (
-        <div className="card" style={{ position: 'absolute', zIndex: 10, top: '100%', left: 0, right: 0, marginTop: 4, padding: 0, maxHeight: 260, overflowY: 'auto' }}>
-          {results.map((u) => (
-            <button
-              type="button"
-              key={u.id}
-              className="ghost"
-              style={{ width: '100%', justifyContent: 'flex-start', padding: '10px 14px', borderRadius: 0, borderBottom: '1px solid var(--border)' }}
-              onClick={() => { onSelect(u); setOpen(false); setQuery(''); }}
-            >
-              <b>{u.username}</b>&nbsp;<span className="muted">{u.email}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function AdminCreditsPage() {
@@ -317,6 +252,7 @@ export function AdminCreditsPage() {
                 <th>Type</th>
                 <th className="num">Credits</th>
                 <th className="num">Available after</th>
+                <th>Reason</th>
               </tr>
             </thead>
             <tbody>
@@ -330,6 +266,7 @@ export function AdminCreditsPage() {
                   <td data-label="Available after" className="num">
                     {row.balance_after}
                   </td>
+                  <td data-label="Reason">{row.reason ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

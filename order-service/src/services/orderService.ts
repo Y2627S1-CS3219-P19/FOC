@@ -6,7 +6,7 @@ import { withTransaction } from '../db.js';
 import type { OrderRow } from '../domain/order.js';
 import { CREATE } from '../domain/transitions.js';
 import * as repo from '../repositories/orderRepository.js';
-import type { ByUserQuery, CreateOrderInput, ListOpenQuery, MineQuery } from '../schemas.js';
+import type { AdminOrdersQuery, ByUserQuery, CreateOrderInput, ListOpenQuery, MineQuery } from '../schemas.js';
 
 /** The caller as the service sees them. Role decides admin rights only, never requester/runner. */
 export interface Caller {
@@ -110,4 +110,8 @@ export function listMine(ctx: AppContext, caller: Caller, q: MineQuery) {
 
 export function listByUser(ctx: AppContext, userId: string, q: ByUserQuery) {
   return repo.listByUser(ctx.pool, userId, q);
+}
+
+export function listAll(ctx: AppContext, q: AdminOrdersQuery) {
+  return repo.listAll(ctx.pool, q);
 }
