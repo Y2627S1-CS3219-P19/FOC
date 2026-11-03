@@ -63,7 +63,9 @@ try {
     if ($existing) { Write-Host "skip   $ref (already in ECR)"; continue }
 
     Write-Host "build  $ref"
-    docker build --platform linux/amd64 -t $ref $builds[$name]
+    # --provenance/--sbom=false: one plain image per tag. With attestations, each push is 3 entries in
+    # ECR and the keep-5 lifecycle rule could expire parts of an image that is still in use.
+    docker build --platform linux/amd64 --provenance=false --sbom=false -t $ref $builds[$name]
     if ($LASTEXITCODE -ne 0) { throw "docker build failed: $name" }
     docker push $ref
     if ($LASTEXITCODE -ne 0) { throw "docker push failed: $name" }
