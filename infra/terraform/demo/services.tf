@@ -26,7 +26,9 @@ module "rabbitmq" {
   environment = { RABBITMQ_DEFAULT_USER = "foc" }
   secrets     = local.service_secret_arns["rabbitmq"]
 
-  health_check_command  = ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+  # Run as the rabbitmq user, not root: the CLI creates ~/.erlang.cookie if the server has not yet,
+  # and a root-owned cookie makes the server crash with "eacces" (seen on Fargate, 2026-11-02).
+  health_check_command  = ["CMD-SHELL", "su-exec rabbitmq rabbitmq-diagnostics -q ping"]
   wait_for_steady_state = true
 
   execution_role_arn = aws_iam_role.execution["rabbitmq"].arn
@@ -84,10 +86,14 @@ module "keycloak" {
     KC_HTTP_RELATIVE_PATH            = "/auth"
     KC_HTTP_MANAGEMENT_RELATIVE_PATH = "/"
     KC_HOSTNAME                      = "${local.public_url}/auth"
-    KC_HOSTNAME_BACKCHANNEL_DYNAMIC  = "true" # services call http://keycloak:8080/auth directly
-    KC_HTTP_ENABLED                  = "true" # TLS ends at CloudFront
-    KC_HEALTH_ENABLED                = "true"
-    KC_CACHE                         = "local" # one instance, no cluster
+    # false: advertise https://<public host>/auth for EVERY endpoint (token, userinfo, jwks too). With
+    # true, those came out as http://<public host>/... (requests reach Keycloak over plain HTTP from
+    # the ALB) and the browser blocked them as mixed content -> "Login failed: Failed to fetch".
+    # The services still call http://keycloak:8080/auth directly; they never read these URLs.
+    KC_HOSTNAME_BACKCHANNEL_DYNAMIC = "false"
+    KC_HTTP_ENABLED                 = "true" # TLS ends at CloudFront
+    KC_HEALTH_ENABLED               = "true"
+    KC_CACHE                        = "local" # one instance, no cluster
 
     # Filled into campuserrand-realm.json on the first import (empty keycloak database).
     KC_SPA_PUBLIC_URL = local.public_url

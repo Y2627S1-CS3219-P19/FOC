@@ -61,13 +61,21 @@ foreach ($svc in $Services) {
   aws ecs update-service --cluster $cluster --service $svc --task-definition $arn --query service.serviceName --output text | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "update-service failed for $svc" }
 
-  Write-Host '   waiting until stable (up to 10 min; keycloak is the slow one)...'
-  aws ecs wait services-stable --cluster $cluster --services $svc
-
-  # Stable can also mean "rolled back by the circuit breaker", so check what is running now.
-  $running = aws ecs describe-services --cluster $cluster --services $svc --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition, rolloutState]" --output text
-  if ($running -notmatch [regex]::Escape($arn) -or $running -notmatch 'COMPLETED') {
-    throw "$svc did not deploy cleanly (now running: $running). Check: aws logs tail /foc/$svc --since 15m"
+  # Watch the deployment itself (not `aws ecs wait services-stable`, which gives up after 10 min - a
+  # keycloak rolling deploy takes longer). If the circuit breaker rolls back, the PRIMARY deployment
+  # becomes the old revision again.
+  Write-Host '   waiting for the rollout (up to 20 min; keycloak takes ~10)...'
+  $deadline = (Get-Date).AddMinutes(20)
+  while ($true) {
+    $primary = aws ecs describe-services --cluster $cluster --services $svc --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition, rolloutState]" --output text
+    if ($primary -match 'FAILED' -or $primary -notmatch [regex]::Escape($arn)) {
+      throw "$svc did not deploy (now: $primary). The circuit breaker rolled back. Check: aws logs tail /foc/$svc --since 15m"
+    }
+    if ($primary -match 'COMPLETED') { break }
+    if ((Get-Date) -gt $deadline) {
+      throw "$svc still rolling out after 20 min ($primary). Check: aws ecs describe-services --cluster foc --services $svc --query services[0].events[0:5].message"
+    }
+    Start-Sleep -Seconds 15
   }
   Write-Host "   OK"
 }

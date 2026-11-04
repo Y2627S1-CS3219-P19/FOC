@@ -11,16 +11,19 @@ variable "github_repo" {
 
 # ---- Two-phase start -------------------------------------------------------------------------
 
+# Both set 2026-11-02 when the services were first created. Never change initial_image_tag: CI and
+# scripts/deploy.ps1 own the running image (aws-infra-plan.txt TASK DEFINITION OWNERSHIP). After a full
+# teardown, start again with services_enabled = false.
 variable "services_enabled" {
-  description = "false = infrastructure only (ECR is still empty). true = create the 7 ECS services."
+  description = "false = infrastructure only (ECR is still empty). true = create the 8 ECS services."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "initial_image_tag" {
   description = "Git SHA the first images were pushed under. Only used when the services are created; CI owns the image after that."
   type        = string
-  default     = ""
+  default     = "b004964384f29f44f9bd331ec19a11347f2f3051"
 
   validation {
     condition     = !var.services_enabled || length(var.initial_image_tag) > 0
