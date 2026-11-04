@@ -9,6 +9,17 @@ variable "github_repo" {
   default     = "Y2627S1-CS3219-P19/FOC"
 }
 
+# GitHub signs this repo's OIDC tokens with the "immutable" subject format, which adds the owner and
+# repo IDs: repo:<owner>@<owner id>/<repo>@<repo id>:environment:aws. With the old repo:<owner>/<repo>
+# format every AWS login failed (2026-11-04, first main.yml run). The IDs also mean a renamed or
+# re-created repo with the same name cannot assume the roles. Check the current value with:
+#   gh api repos/Y2627S1-CS3219-P19/FOC/actions/oidc/customization/sub --jq .sub_claim_prefix
+variable "github_oidc_sub_prefix" {
+  description = "The 'sub' claim prefix GitHub puts in this repo's OIDC tokens (see the comment above)."
+  type        = string
+  default     = "repo:Y2627S1-CS3219-P19@323916185/FOC@1357921616"
+}
+
 # ---- Two-phase start -------------------------------------------------------------------------
 
 # Both set 2026-11-02 when the services were first created. Never change initial_image_tag: CI and
