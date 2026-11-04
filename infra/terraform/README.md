@@ -6,7 +6,7 @@ Only the infra owner runs `terraform apply`, from a laptop, on an up-to-date `ma
 | Folder | What it is |
 |---|---|
 | `bootstrap/` | The S3 bucket that holds the demo state. Local state. Applied once (done). |
-| `demo/` | Everything else: VPC, NAT instance, ECR, IAM/OIDC, RDS, ECS (7 services + a RabbitMQ container), ALB, CloudFront, alarms. |
+| `demo/` | Everything else: VPC, NAT instance, ECR, IAM/OIDC, RDS, ECS (7 services + a RabbitMQ container), ALB, CloudFront, alarms, dashboard. |
 | `modules/ecs-service/` | One ECS service (task definition + service + Service Connect). Used 7 times by `demo/services.tf`. |
 | `scripts/` | `put-secrets.ps1`, `push-images.ps1`, `deploy.ps1` (laptop); `admin-task.sh` + `create-databases.sql` (run inside the foc-admin ECS task). |
 
@@ -96,6 +96,22 @@ ALB and CloudFront, but cannot change anything, read SSM secret values or read t
 
 If switching fails with "not authorized to perform sts:AssumeRole", the NUS rules block switching
 between sandbox accounts; then only NUS can add teammates to this account.
+
+## Monitoring
+
+CloudWatch > Dashboards > `foc` (`demo/dashboard.tf`) shows alarm states, ALB traffic, 5xx errors and
+response time, messaging, CPU and memory per service, RDS, and the latest error logs.
+Every alarm emails `alert_email` through SNS (`demo/observability.tf`).
+
+RabbitMQ sends no CloudWatch metrics, so the messaging metrics (namespace `FOC`) come from log lines:
+
+| Metric | From | Alarm |
+| ----- | ----- | ----- |
+| `DeadLetteredMessages` | `"Message dead-lettered"` in credit-service / order-service logs | `foc-messages-dead-lettered`: any in 5 min |
+| `OutboxOldestUnpublishedSeconds`, `OutboxBacklog`, `OrderDlqDepth` | order-service's outbox monitor, every 30s | `foc-outbox-publish-lag`: over 120s for 3 min |
+
+`OrderDlqDepth` covers only order-service's DLQ. A message that fails in credit-service shows up in
+`DeadLetteredMessages`. If you rename these log messages or fields, update the filters too.
 
 ## Rules
 
