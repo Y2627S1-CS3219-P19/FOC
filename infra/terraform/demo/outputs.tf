@@ -15,6 +15,16 @@ output "plan_role_arn" {
   value = aws_iam_role.plan.arn
 }
 
+output "team_role_arn" {
+  description = "Teammates switch into this role (team-access.tf). Null when team_account_ids is empty."
+  value       = one(aws_iam_role.team[*].arn)
+}
+
+output "team_switch_role_url" {
+  description = "Send this link to teammates: they open it while signed in to their own NUS sandbox account."
+  value       = length(var.team_account_ids) > 0 ? "https://signin.aws.amazon.com/switchrole?account=${local.account_id}&roleName=foc-team-readonly&displayName=FOC-demo" : null
+}
+
 output "rds_address" {
   value = aws_db_instance.main.address
 }
