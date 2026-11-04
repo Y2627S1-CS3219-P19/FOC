@@ -28,6 +28,7 @@ Two values you must actually think about:
   BOOTSTRAP_ADMIN_EMAIL          any @u.nus.edu address - this becomes the first admin
   BOOTSTRAP_ADMIN_TEMP_PASSWORD  8+ characters with an uppercase, a lowercase and a digit
                                  (e.g. ChangeMe123) - you must change it at first login
+  BOOTSTRAP_ADMIN_2_*            the same for the second admin (a different email)
 
 .env is git-ignored. Never commit it.
 
@@ -68,7 +69,8 @@ As the admin:
   3. You now have the admin pages: Admin users, Admin role changes, and the
      create/edit/delete buttons on suppliers.
 
-The admin is created ONCE, on the first start, and never again.
+Each admin is created ONCE, on the first start, and never again. The second
+admin (BOOTSTRAP_ADMIN_2_*) logs in the same way.
 
 As a normal user:
   1. Sign up on the web app with any @u.nus.edu email.

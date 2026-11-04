@@ -12,7 +12,7 @@ const ACTION_LABEL: Record<string, string> = {
   DEMOTE_ADMIN: 'Demoted to user',
   ROLE_CHANGE_REJECTED: 'Rejected role change',
   ROLE_CHANGE_CANCELLED: 'Cancelled role change',
-  BOOTSTRAP_ADMIN: 'First admin created',
+  BOOTSTRAP_ADMIN: 'Startup admin created',
 };
 
 /** The parts of `details` worth reading; ids are left out. */

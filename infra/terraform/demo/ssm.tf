@@ -19,6 +19,9 @@ locals {
       BOOTSTRAP_ADMIN_EMAIL         = "/foc/user-service/BOOTSTRAP_ADMIN_EMAIL"
       BOOTSTRAP_ADMIN_USERNAME      = "/foc/user-service/BOOTSTRAP_ADMIN_USERNAME"
       BOOTSTRAP_ADMIN_TEMP_PASSWORD = "/foc/user-service/BOOTSTRAP_ADMIN_TEMP_PASSWORD"
+      BOOTSTRAP_ADMIN_2_EMAIL         = "/foc/user-service/BOOTSTRAP_ADMIN_2_EMAIL"
+      BOOTSTRAP_ADMIN_2_USERNAME      = "/foc/user-service/BOOTSTRAP_ADMIN_2_USERNAME"
+      BOOTSTRAP_ADMIN_2_TEMP_PASSWORD = "/foc/user-service/BOOTSTRAP_ADMIN_2_TEMP_PASSWORD"
     })
     "supplier-service" = merge(local.app_common_secrets, {
       DATABASE_URL = "/foc/supplier-service/DATABASE_URL"
