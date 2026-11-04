@@ -66,8 +66,85 @@ resource "aws_cloudwatch_metric_alarm" "no_healthy_targets" {
   ok_actions          = local.alarm_actions
 }
 
-# No DLQ-depth alarm: a RabbitMQ container sends no CloudWatch metrics. order-service's /health/ready
-# reports its DLQ depth, and its outbox monitor logs it.
+# ---- Messaging metrics from logs -------------------------------------------------------------
+# A RabbitMQ container sends no CloudWatch metrics, so these come from the services' JSON (pino) logs.
+
+locals {
+  metrics_namespace = "FOC"
+}
+
+# credit-service and order-service both log "Message dead-lettered" when a message gives up (5 tries,
+# or malformed). Both filters write the same metric, so the alarm sees the total.
+resource "aws_cloudwatch_log_metric_filter" "dead_lettered" {
+  for_each = toset(["credit-service", "order-service"])
+
+  name           = "foc-${each.key}-dead-lettered"
+  log_group_name = aws_cloudwatch_log_group.service[each.key].name
+  pattern        = "{ $.msg = \"Message dead-lettered\" }"
+
+  metric_transformation {
+    name          = "DeadLetteredMessages"
+    namespace     = local.metrics_namespace
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+# order-service's outbox monitor logs these every 30s (jobs/outboxMonitor.ts). dlqDepth is null while
+# RabbitMQ is down, and a null value does not match the >= 0 test, so no point is written then.
+locals {
+  outbox_metrics = {
+    OutboxOldestUnpublishedSeconds = "$.outbox.oldestUnpublishedSeconds"
+    OutboxBacklog                  = "$.outbox.backlog"
+    OrderDlqDepth                  = "$.dlqDepth"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "outbox" {
+  for_each = local.outbox_metrics
+
+  name           = "foc-order-service-${each.key}"
+  log_group_name = aws_cloudwatch_log_group.service["order-service"].name
+  pattern        = "{ ${each.value} >= 0 }"
+
+  metric_transformation {
+    name      = each.key
+    namespace = local.metrics_namespace
+    value     = each.value
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dead_lettered" {
+  alarm_name          = "foc-messages-dead-lettered"
+  alarm_description   = "A message went to a dead-letter queue. Search the credit-service / order-service logs for \"Message dead-lettered\", then look at the .dlq queue in the RabbitMQ UI."
+  namespace           = local.metrics_namespace
+  metric_name         = "DeadLetteredMessages"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+}
+
+# Events waiting in the outbox for over 2 minutes = RabbitMQ (or the relay) is down. Orders still save.
+resource "aws_cloudwatch_metric_alarm" "outbox_lag" {
+  alarm_name          = "foc-outbox-publish-lag"
+  alarm_description   = "order-service events are not reaching RabbitMQ. Check the rabbitmq ECS service and the order-service logs."
+  namespace           = local.metrics_namespace
+  metric_name         = "OutboxOldestUnpublishedSeconds"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 3
+  threshold           = 120
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+}
 
 resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   alarm_name          = "foc-rds-cpu"
