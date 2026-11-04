@@ -31,8 +31,8 @@ data "aws_iam_policy_document" "deploy_trust" {
       test     = "StringEquals"
       variable = local.oidc_sub
       values = [
-        "repo:${var.github_repo}:environment:aws",
-        "repo:${var.github_repo}:environment:aws-frozen",
+        "${var.github_oidc_sub_prefix}:environment:aws",
+        "${var.github_oidc_sub_prefix}:environment:aws-frozen",
       ]
     }
   }
@@ -108,8 +108,8 @@ data "aws_iam_policy_document" "plan_trust" {
       test     = "StringEquals"
       variable = local.oidc_sub
       values = [
-        "repo:${var.github_repo}:pull_request",
-        "repo:${var.github_repo}:ref:refs/heads/main",
+        "${var.github_oidc_sub_prefix}:pull_request",
+        "${var.github_oidc_sub_prefix}:ref:refs/heads/main",
       ]
     }
   }
