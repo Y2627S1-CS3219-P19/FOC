@@ -9,9 +9,9 @@ Run once after the first `terraform apply` of demo/:
 - A parameter that already exists is KEPT. Re-running is safe and never changes a password that a
   database already uses. To really rotate one, delete the parameter first, then re-run this script
   and the foc-admin task, then redeploy the services.
-- It asks for 4 things it cannot generate: the Gmail address + Gmail app password Keycloak sends
-  mail with (Google Account > Security > 2-Step Verification on > App passwords), and the first
-  FoC admin's email + temporary password. (Not SES: the NUS organisation blocks IAM users, which
+- It asks for 6 things it cannot generate: the Gmail address + Gmail app password Keycloak sends
+  mail with (Google Account > Security > 2-Step Verification on > App passwords), and the first two
+  FoC admins' emails + temporary passwords. (Not SES: the NUS organisation blocks IAM users, which
   SES SMTP credentials need.)
 #>
 $env:AWS_PROFILE = 'nus'
@@ -78,10 +78,13 @@ Set-Secret '/foc/keycloak/KC_BOOTSTRAP_ADMIN_PASSWORD'   { New-Secret }
 Set-Secret '/foc/keycloak/SMTP_USER'     { Read-Required 'Gmail address Keycloak sends from (same as email_from_address)' }
 Set-Secret '/foc/keycloak/SMTP_PASSWORD' { (Read-Required 'Gmail app password (16 letters)' -Hidden) -replace '\s', '' }
 
-# First FoC admin (F29.3), created by user-service on its first start.
+# First two FoC admins (F29.3), created by user-service on its first start.
 Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_EMAIL'         { Read-Required 'First FoC admin email (@u.nus.edu)' }
 Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_USERNAME'      { 'admin' }
 Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_TEMP_PASSWORD' { Read-Required 'Its temporary password (8+ chars, upper, lower, digit)' -Hidden }
+Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_2_EMAIL'         { Read-Required 'Second FoC admin email (@u.nus.edu)' }
+Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_2_USERNAME'      { 'admin2' }
+Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_2_TEMP_PASSWORD' { Read-Required 'Its temporary password (8+ chars, upper, lower, digit)' -Hidden }
 
 Write-Host ''
 Write-Host 'Done. Check (names only, no values):  aws ssm get-parameters-by-path --path /foc --recursive --query "Parameters[].Name"'

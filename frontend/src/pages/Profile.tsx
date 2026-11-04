@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useApi } from '../api';
 import { ErrorBox, FieldError } from '../components';
-import { ACCOUNT_CONSOLE_URL } from '../config';
 import type { Profile } from '../types';
 
 export function ProfilePage() {
@@ -66,13 +65,6 @@ export function ProfilePage() {
           <dt>Rating</dt>
           <dd>{profile.rating ?? 'No ratings yet'}</dd>
         </dl>
-        <p className="muted">
-          Username, email and role cannot be changed here. Change your password in the{' '}
-          <a href={ACCOUNT_CONSOLE_URL} target="_blank" rel="noreferrer">
-            Keycloak account page
-          </a>
-          .
-        </p>
       </div>
       <form className="card stack narrow" onSubmit={save} noValidate>
         <h2>Edit details</h2>

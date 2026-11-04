@@ -26,6 +26,9 @@ const EnvSchema = z.object({
   BOOTSTRAP_ADMIN_EMAIL: z.string().optional().default(''),
   BOOTSTRAP_ADMIN_USERNAME: z.string().optional().default('admin'),
   BOOTSTRAP_ADMIN_TEMP_PASSWORD: z.string().optional().default(''),
+  BOOTSTRAP_ADMIN_2_EMAIL: z.string().optional().default(''),
+  BOOTSTRAP_ADMIN_2_USERNAME: z.string().optional().default('admin2'),
+  BOOTSTRAP_ADMIN_2_TEMP_PASSWORD: z.string().optional().default(''),
   AMQP_URL: z.string().optional().default(''),
   DEBUG_EVENT_QUEUE: z.string().optional().default('false'),
   TRUST_PROXY: z.string().optional().default(''),
@@ -54,11 +57,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     adminContactEmail: e.ADMIN_CONTACT_EMAIL,
     registerRateLimitPerHour: e.REGISTER_RATE_LIMIT_PER_HOUR,
     verifyEmailLifespanSeconds: e.VERIFY_EMAIL_LIFESPAN_SECONDS,
-    bootstrapAdmin: {
-      email: e.BOOTSTRAP_ADMIN_EMAIL.trim().toLowerCase(),
-      username: (e.BOOTSTRAP_ADMIN_USERNAME || 'admin').trim().toLowerCase(),
-      tempPassword: e.BOOTSTRAP_ADMIN_TEMP_PASSWORD,
-    },
+    bootstrapAdmins: [
+      {
+        email: e.BOOTSTRAP_ADMIN_EMAIL.trim().toLowerCase(),
+        username: (e.BOOTSTRAP_ADMIN_USERNAME || 'admin').trim().toLowerCase(),
+        tempPassword: e.BOOTSTRAP_ADMIN_TEMP_PASSWORD,
+      },
+      {
+        email: e.BOOTSTRAP_ADMIN_2_EMAIL.trim().toLowerCase(),
+        username: (e.BOOTSTRAP_ADMIN_2_USERNAME || 'admin2').trim().toLowerCase(),
+        tempPassword: e.BOOTSTRAP_ADMIN_2_TEMP_PASSWORD,
+      },
+    ],
     amqpUrl: e.AMQP_URL,
     debugEventQueue: e.DEBUG_EVENT_QUEUE === 'true',
     trustProxy: e.TRUST_PROXY ? (Number.isNaN(Number(e.TRUST_PROXY)) ? e.TRUST_PROXY : Number(e.TRUST_PROXY)) : false,

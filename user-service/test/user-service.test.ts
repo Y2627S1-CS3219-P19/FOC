@@ -280,7 +280,7 @@ describe('First-admin bootstrap (F29.3)', () => {
       BOOTSTRAP_ADMIN_TEMP_PASSWORD: 'TempPass1',
     });
     const results = await Promise.all([runAdminBootstrap(bootCtx), runAdminBootstrap(bootCtx)]);
-    expect(results.sort()).toEqual(['created', 'skipped-already-completed']);
+    expect(results.map((r) => r[0]).sort()).toEqual(['created', 'skipped-already-completed']);
 
     const { rows } = await ctx.pool.query('SELECT id, role FROM users');
     expect(rows).toHaveLength(1);
@@ -293,11 +293,38 @@ describe('First-admin bootstrap (F29.3)', () => {
 
     // Even after that admin is demoted in the DB, a restart does not re-grant anything.
     await ctx.pool.query(`UPDATE users SET role = 'user'`);
-    expect(await runAdminBootstrap(bootCtx)).toBe('skipped-already-completed');
+    expect(await runAdminBootstrap(bootCtx)).toEqual(['skipped-already-completed', 'skipped-not-configured']);
     await bootCtx.pool.end();
   });
 
+  it('creates the second admin too, even after the first one was already made', async () => {
+    const first = uniq('boot');
+    const second = uniq('boot');
+    const firstOnly = await createTestContext({
+      BOOTSTRAP_ADMIN_EMAIL: `${first}@u.nus.edu`,
+      BOOTSTRAP_ADMIN_USERNAME: first,
+      BOOTSTRAP_ADMIN_TEMP_PASSWORD: 'TempPass1',
+    });
+    expect(await runAdminBootstrap(firstOnly)).toEqual(['created', 'skipped-not-configured']);
+    await firstOnly.pool.end();
+
+    const both = await createTestContext({
+      BOOTSTRAP_ADMIN_EMAIL: `${first}@u.nus.edu`,
+      BOOTSTRAP_ADMIN_USERNAME: first,
+      BOOTSTRAP_ADMIN_TEMP_PASSWORD: 'TempPass1',
+      BOOTSTRAP_ADMIN_2_EMAIL: `${second}@u.nus.edu`,
+      BOOTSTRAP_ADMIN_2_USERNAME: second,
+      BOOTSTRAP_ADMIN_2_TEMP_PASSWORD: 'TempPass1',
+    });
+    expect(await runAdminBootstrap(both)).toEqual(['skipped-already-completed', 'created']);
+    await both.pool.end();
+
+    const { rows } = await ctx.pool.query(`SELECT id, username FROM users WHERE role = 'admin' ORDER BY username`);
+    rows.forEach((r: { id: string }) => track(r.id));
+    expect(rows.map((r: { username: string }) => r.username).sort()).toEqual([first, second].sort());
+  });
+
   it('does nothing when not configured', async () => {
-    expect(await runAdminBootstrap(ctx)).toBe('skipped-not-configured');
+    expect(await runAdminBootstrap(ctx)).toEqual(['skipped-not-configured', 'skipped-not-configured']);
   });
 });

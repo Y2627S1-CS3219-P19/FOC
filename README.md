@@ -85,10 +85,13 @@ timeouts) is defined in `infra/keycloak/campuserrand-realm.json`; it is imported
 only when the Keycloak database is empty, so after editing it run
 `docker compose down -v` (wipes local data) and start again.
 
-**First admin.** On the first start the User Service creates the admin from
-`BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_TEMP_PASSWORD` (you must change the
+**First admins.** On the first start the User Service creates two admins from
+`BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_TEMP_PASSWORD` and
+`BOOTSTRAP_ADMIN_2_EMAIL` / `BOOTSTRAP_ADMIN_2_TEMP_PASSWORD` (each must change the
 password at first login), then never again. Further admins need two admins:
 one requests on *Admin: users*, a different one confirms on *Admin: role changes*.
+Do not change roles or delete users in the Keycloak console: the User Service
+database would not see it.
 
 **Tests** (need the stack running):
 
