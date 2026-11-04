@@ -107,31 +107,6 @@ export function ConfirmButton({ label, confirmLabel = 'Yes, do it', onConfirm, c
   );
 }
 
-/** Small dev panel: who am I according to the token, and when does it expire. Handy for the D2 demo. */
-export function DebugStrip() {
-  const { user, claims, roles } = useAuth();
-  const [now, setNow] = useState(() => Date.now());
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  if (!user) return <div className="debug">Not logged in</div>;
-  const left = claims?.exp ? Math.max(0, Math.round(claims.exp - now / 1000)) : 0;
-  return (
-    <div className="debug">
-      <span>
-        <b>{claims?.preferred_username}</b> roles: [{roles.join(', ')}] | access token expires in {Math.floor(left / 60)}m {left % 60}s
-        (auto-renews)
-      </span>
-      <button className="link" onClick={() => setOpen(!open)}>
-        {open ? 'hide' : 'show'} token claims
-      </button>
-      {open && <pre>{JSON.stringify(claims, null, 2)}</pre>}
-    </div>
-  );
-}
-
 /** Inline user search that returns an AdminUser when one is picked. */
 export function UserPicker({ label, selected, onSelect }: { label: string; selected: AdminUser | null; onSelect: (u: AdminUser | null) => void }) {
   const api = useApi();

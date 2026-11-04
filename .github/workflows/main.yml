@@ -1,0 +1,271 @@
+# Main pipeline = continuous deployment (cicd-plan.txt section 2, implementation-plan Phase 9).
+# On every merge to main: work out which images changed since the last GREEN push run, then for each
+# one build -> Trivy -> push to ECR (tag = full git SHA, immutable) -> deploy to ECS (same steps as
+# infra/terraform/scripts/deploy.ps1) -> smoke test through the public URL.
+#
+# Differences from the full plan, on purpose for now: no compose E2E with the built images (pr.yml has
+# no e2e job yet), no weekly scheduled run, no buildx cache. Never touches rabbitmq or Terraform.
+#
+# Needs (implementation-plan Phase 8): repo variables AWS_REGION, DEPLOY_ROLE_ARN, ECR_REGISTRY,
+# PUBLIC_HOST, DEPLOY_FREEZE; environments "aws" and "aws-frozen" (main only; aws-frozen with a
+# required reviewer). Third-party actions are pinned to full commit SHAs.
+name: Main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Images to build/deploy: empty = changed since the last green run, "all", or a comma list (e.g. order-service,frontend)'
+        required: false
+        default: ''
+      push_only:
+        description: Build and push only, do not deploy
+        type: boolean
+        default: false
+
+# Runs queue in merge order. Never cancel one: it may be in the middle of a deploy.
+concurrency:
+  group: main-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ALL_IMAGES: '["user-service","supplier-service","credit-service","order-service","frontend","gateway","keycloak"]'
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # gh run list (last green run)
+    outputs:
+      images: ${{ steps.result.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the diff base can be many commits back
+
+      # Diff base = the commit of the last successful PUSH run on main. Manual runs do not count: a run
+      # for one service must not hide another service's undeployed change. None yet -> every image.
+      - id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERVICES: ${{ inputs.services }}
+        run: |
+          if [ -n "$SERVICES" ]; then echo "mode=input" >> "$GITHUB_OUTPUT"; exit 0; fi
+          sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow main.yml --branch main --event push \
+                --status success --limit 1 --json headSha --jq '.[0].headSha // empty')
+          if [ -n "$sha" ] && git cat-file -e "$sha^{commit}" 2>/dev/null; then
+            echo "Diff base: last green run at $sha"
+            echo "mode=diff" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "No green push run yet (or its commit is gone): every image."
+            echo "mode=all" >> "$GITHUB_OUTPUT"
+          fi
+
+      - id: filter
+        if: steps.base.outputs.mode == 'diff'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          base: ${{ steps.base.outputs.sha }}
+          # Same filters as pr.yml (cicd-plan.txt section 1). Keep the two in step.
+          filters: |
+            shared: &shared
+              - .github/workflows/**
+              - package.json
+              - '*/package.json'
+              - tsconfig.base.json
+              - compose.yaml
+              - .env.example
+            workspace: &workspace
+              - packages/**
+              - package-lock.json
+            user-service: [*shared, *workspace, 'user-service/**']
+            credit-service: [*shared, *workspace, 'credit-service/**']
+            order-service: [*shared, *workspace, 'order-service/**']
+            frontend: [*shared, *workspace, 'frontend/**']
+            supplier-service: [*shared, 'supplier-service/**', 'data/**']
+            gateway: [*shared, 'gateway/**']
+            keycloak: [*shared, 'infra/keycloak/**']
+
+      - id: result
+        env:
+          MODE: ${{ steps.base.outputs.mode }}
+          SERVICES: ${{ inputs.services }}
+          CHANGES: ${{ steps.filter.outputs.changes || '[]' }}
+        run: |
+          case "$MODE" in
+            all) images="$ALL_IMAGES" ;;
+            diff) images=$(jq -c --argjson all "$ALL_IMAGES" '[.[] | select(. as $i | $all | index($i))]' <<<"$CHANGES") ;;
+            input)
+              if [ "$SERVICES" = all ]; then images="$ALL_IMAGES"
+              else
+                images=$(jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))' <<<"$SERVICES")
+                bad=$(jq -r --argjson all "$ALL_IMAGES" '[.[] | select(. as $i | $all | index($i) | not)] | join(", ")' <<<"$images")
+                if [ -n "$bad" ]; then echo "::error::Unknown image(s): $bad. Use: $(jq -r 'join(", ")' <<<"$ALL_IMAGES"), all"; exit 1; fi
+              fi ;;
+          esac
+          echo "Images: $images"
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
+  build-push:
+    needs: changes
+    if: needs.changes.outputs.images != '[]'
+    name: build-push (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    # foc-deploy trusts only jobs in these environments (github-oidc.tf). Building never waits for a
+    # reviewer; only the deploy job switches to aws-frozen.
+    environment: aws
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.changes.outputs.images) }}
+    env:
+      IMAGE: ${{ matrix.image }}
+      REF: ${{ vars.ECR_REGISTRY }}/foc/${{ matrix.image }}:${{ github.sha }}
+      TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Tags are immutable: a re-run of a run that already pushed this SHA reuses the image.
+      - id: exists
+        run: |
+          if aws ecr describe-images --repository-name "foc/$IMAGE" --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "foc/$IMAGE:$GITHUB_SHA is already in ECR: skipping build and push."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Docker build
+        if: steps.exists.outputs.skip != 'true'
+        env:
+          PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
+        # Same contexts and arguments as pr.yml and scripts/push-images.ps1. One plain image per tag
+        # (no provenance/SBOM entries, which would count against the ECR keep-5 rule).
+        run: |
+          case "$IMAGE" in
+            gateway)  args=(-f gateway/Dockerfile gateway) ;;
+            keycloak) args=(-f infra/keycloak/Dockerfile infra/keycloak) ;;
+            frontend) args=(-f frontend/Dockerfile --build-arg "VITE_KEYCLOAK_URL=https://$PUBLIC_HOST/auth" .) ;;
+            *)        args=(-f "$IMAGE/Dockerfile" .) ;;
+          esac
+          docker buildx build --load --platform linux/amd64 --provenance=false --sbom=false -t "$REF" "${args[@]}"
+
+      - name: Trivy (fail on fixable CRITICAL)
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          mkdir -p "$HOME/.cache/trivy"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" -v "$PWD/.trivyignore:/.trivyignore:ro" \
+            "$TRIVY_IMAGE" image --no-progress --ignorefile /.trivyignore \
+            --severity CRITICAL --ignore-unfixed --exit-code 1 "$REF"
+
+      - name: Push to ECR
+        if: steps.exists.outputs.skip != 'true'
+        run: |
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${{ vars.ECR_REGISTRY }}"
+          docker push "$REF"
+          docker logout "${{ vars.ECR_REGISTRY }}"
+
+  deploy:
+    needs: [changes, build-push]
+    if: needs.changes.outputs.images != '[]' && !inputs.push_only && github.ref == 'refs/heads/main'
+    name: deploy (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    # DEPLOY_FREEZE=true (around demos) -> every deploy waits for a reviewer's approval.
+    environment: ${{ vars.DEPLOY_FREEZE == 'true' && 'aws-frozen' || 'aws' }}
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.changes.outputs.images) }}
+    env:
+      IMAGE: ${{ matrix.image }}
+      CLUSTER: foc
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Terraform owns the task definition; CI only swaps the image (aws-infra-plan.txt TASK DEFINITION
+      # OWNERSHIP). Take the family's LATEST revision so env changes from a terraform apply are kept.
+      - name: Register a task definition with the new image (by digest)
+        id: taskdef
+        run: |
+          digest=$(aws ecr describe-images --repository-name "foc/$IMAGE" --image-ids imageTag="$GITHUB_SHA" \
+                   --query 'imageDetails[0].imageDigest' --output text)
+          image="${{ vars.ECR_REGISTRY }}/foc/$IMAGE@$digest"
+          echo "Deploying $image"
+          aws ecs describe-task-definition --task-definition "foc-$IMAGE" --query taskDefinition --output json |
+            jq --arg img "$image" '.containerDefinitions[0].image = $img
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities,
+                    .registeredAt, .registeredBy, .deregisteredAt)' > taskdef.json
+          arn=$(aws ecs register-task-definition --cli-input-json file://taskdef.json \
+                --query taskDefinition.taskDefinitionArn --output text)
+          echo "Registered $arn"
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+
+      # Watch the rollout ourselves: `aws ecs wait services-stable` gives up after 10 min and a Keycloak
+      # rolling deploy takes ~10-12. If the circuit breaker rolls back, PRIMARY becomes the old revision.
+      - name: Update the service and wait for the rollout (up to 20 min)
+        env:
+          ARN: ${{ steps.taskdef.outputs.arn }}
+        run: |
+          aws ecs update-service --cluster "$CLUSTER" --service "$IMAGE" --task-definition "$ARN" \
+            --query service.serviceName --output text
+          deadline=$(( $(date +%s) + 1200 ))
+          while true; do
+            primary=$(aws ecs describe-services --cluster "$CLUSTER" --services "$IMAGE" \
+              --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition, rolloutState]" --output text)
+            echo "$(date +%T) $primary"
+            if [[ "$primary" == *FAILED* || "$primary" != *"$ARN"* ]]; then
+              echo "::error::$IMAGE did not deploy; the circuit breaker rolled back. Check: aws logs tail /foc/$IMAGE --since 15m"
+              exit 1
+            fi
+            [[ "$primary" == *COMPLETED* ]] && break
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo "::error::$IMAGE still rolling out after 20 min."
+              aws ecs describe-services --cluster "$CLUSTER" --services "$IMAGE" --query 'services[0].events[0:5].message'
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "$IMAGE is running $ARN"
+
+  # Proves the public path works after a deploy: CloudFront -> ALB -> gateway -> service, and Keycloak.
+  # No logged-in call: AWS only accepts tokens from the web app (ALLOWED_TOKEN_CLIENTS), so "401 without
+  # a token" stands in for it (the service checked the request against Keycloak's keys).
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    env:
+      BASE: https://${{ vars.PUBLIC_HOST }}
+    steps:
+      - name: Smoke test
+        run: |
+          set -u
+          fail=0
+          check() { if [ "$2" = "$3" ]; then echo "OK   $1"; else echo "FAIL $1: got '$2', want '$3'"; fail=1; fi; }
+          check "gateway /healthz"      "$(curl -s --max-time 10 "$BASE/healthz")" ok
+          check "web app /"             "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$BASE/")" 200
+          oidc=$(curl -s --max-time 10 "$BASE/auth/realms/campuserrand/.well-known/openid-configuration")
+          check "OIDC issuer"           "$(jq -r .issuer <<<"$oidc")" "$BASE/auth/realms/campuserrand"
+          check "OIDC token endpoint"   "$(jq -r '.token_endpoint | startswith("https://")' <<<"$oidc")" true
+          check "API without token 401" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$BASE/v1/orders")" 401
+          check "internal routes 404"   "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$BASE/v1/internal/x")" 404
+          exit $fail

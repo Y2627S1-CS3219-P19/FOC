@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, userManager } from './auth';
-import { DebugStrip, RequireAdmin, RequireLogin } from './components';
+import { RequireAdmin, RequireLogin } from './components';
 import { useWallet } from './errands';
 import { AdminRoleChangesPage } from './pages/AdminRoleChanges';
 import { AdminAuditPage } from './pages/AdminAudit';
@@ -141,7 +141,6 @@ export function App() {
           )}
         </nav>
       </header>
-      <DebugStrip />
       <main>
         <Routes>
           <Route path="/" element={<HomePage />} />
