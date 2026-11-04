@@ -57,6 +57,16 @@ variable "alert_email" {
   type        = string
 }
 
+variable "team_account_ids" {
+  description = "Teammates' own NUS sandbox account IDs (12 digits). Each may switch into foc-team-readonly (team-access.tf). Empty = no team role."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for id in var.team_account_ids : can(regex("^[0-9]{12}$", id))])
+    error_message = "Each team account ID must be exactly 12 digits."
+  }
+}
+
 variable "admin_contact_email" {
   description = "Shown to suspended users (user-service ADMIN_CONTACT_EMAIL)."
   type        = string

@@ -5,3 +5,7 @@
 email_from_address = "someone@gmail.com"
 
 alert_email = "e0000001@u.nus.edu"
+
+# Teammates' own NUS sandbox account IDs: they get a read-only "switch role" (team-access.tf).
+# Each runs `aws sts get-caller-identity --query Account --output text` in their own account.
+team_account_ids = []

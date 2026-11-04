@@ -65,6 +65,31 @@ rolls back and the script says so. Do not touch `initial_image_tag` for this.
 Also the way to apply a Terraform env/secret change to a running service: apply, then
 `deploy.ps1 -Services <svc>` with the commit that is already running.
 
+## Team access (read-only)
+
+IAM users are blocked by the NUS organisation, so teammates use their OWN NUS sandbox account and
+switch into the role `foc-team-readonly` (`demo/team-access.tf`). They see ECS, logs, alarms, RDS,
+ALB and CloudFront, but cannot change anything, read SSM secret values or read the Terraform state.
+
+1. Each teammate signs in to their own account and runs
+   `aws sts get-caller-identity --query Account --output text` (or copies the 12-digit ID from the
+   console's top-right menu).
+2. The infra owner adds the IDs to `terraform.tfvars` (`team_account_ids = ["111111111111", ...]`),
+   then `terraform plan` (expect 3 to add: role, policy attachment, inline policy) and `terraform apply`.
+3. Send them `terraform output -raw team_switch_role_url`. They open it while signed in to their own
+   account -> "Switch role". Sessions last 1 hour; switch again after that.
+   CLI instead: in their `~/.aws/config`
+   ```ini
+   [profile foc-team]
+   role_arn = <terraform output -raw team_role_arn>
+   source_profile = <their own SSO profile>
+   region = ap-southeast-1
+   ```
+   then e.g. `aws logs tail /foc/order-service --since 15m --profile foc-team`.
+
+If switching fails with "not authorized to perform sts:AssumeRole", the NUS rules block switching
+between sandbox accounts; then only NUS can add teammates to this account.
+
 ## Rules
 
 - Any destroy (`-`) or replace (`-/+`) of RDS, ECR or a secret in a plan: stop and ask.
@@ -81,10 +106,23 @@ Also the way to apply a Terraform env/secret change to a running service: apply,
   run `terraform untaint 'module.nat.aws_autoscaling_group.main[0]'`, then `terraform apply` again.
 - **A service keeps restarting**: `aws logs tail /foc/<service> --since 15m`.
 - **Keycloak never gets healthy** (0.5 vCPU / 1 GB): raise to 1024 / 2048 in `services.tf`.
+- **"Login failed: Failed to fetch"** after the Keycloak login page: the browser blocked an
+  `http://` Keycloak URL on the https site. Check
+  `curl.exe -s <public_url>/auth/realms/campuserrand/.well-known/openid-configuration | jq .token_endpoint`
+  starts with `https://`. If not, `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` must be `"false"` in
+  services.tf; apply, then `deploy.ps1 -Services keycloak -Tag <running sha>`.
 - **Login loops or "Cookie not found"** on Keycloak: Keycloak is not treating requests as HTTPS.
   Check `KC_HOSTNAME` in the keycloak task definition is `https://<public host>/auth`.
+- **deploy.ps1 seems slow on keycloak**: a Keycloak rolling deploy takes ~10-12 min (new task
+  boots, health checks, old task drains). The script waits up to 20 min.
 - **Emails do not arrive**: check Junk first. Then `aws logs tail /foc/keycloak --since 15m` for
   SMTP errors. "535 Username and Password not accepted" = wrong Gmail address or app password
-  (or 2-Step Verification was turned off, which revokes app passwords): delete
-  `/foc/keycloak/SMTP_USER` and `SMTP_PASSWORD`, re-run put-secrets.ps1, then
-  `deploy.ps1 -Services keycloak -Tag <running sha>`. Gmail allows ~500 emails a day.
+  (or 2-Step Verification was turned off, which revokes app passwords). Make a new app password,
+  then fix it in BOTH places: (1) SSM - `aws ssm delete-parameters --names /foc/keycloak/SMTP_USER
+  /foc/keycloak/SMTP_PASSWORD`, re-run put-secrets.ps1; (2) Keycloak itself - `/auth/admin` as
+  kc-admin -> realm campuserrand -> Realm settings -> Email -> Username/Password -> Save.
+  Keycloak copied the SMTP login into its database at the first start, so (1) alone changes
+  nothing until a full re-create. Gmail allows ~500 emails a day.
+- **A user never got the verification email** (registered while email was broken): they log
+  in and click "re-send", or in `/auth/admin` -> campuserrand -> Users -> the user ->
+  Credentials -> Credential reset -> Verify Email -> Send email (or set "Email verified" on).
