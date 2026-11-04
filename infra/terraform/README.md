@@ -39,7 +39,7 @@ ECS cannot start a service without an image, and ECR starts empty. So:
    ```
    Done when the log ends with `ALL DONE`. Safe to run again.
 5. **Images.** From the repo root on a clean, up-to-date `main`: `.\infra\terraform\scripts\push-images.ps1`.
-   Note the printed SHA. (Later, main.yml does this.)
+   Note the printed SHA. (After the first start, main.yml does this.)
 6. **Services.** `terraform apply -var services_enabled=true -var initial_image_tag=<sha>`.
    Keycloak and RabbitMQ first, then user-service, then the rest; Terraform waits for each, so this
    takes ~10-15 min.
@@ -50,20 +50,27 @@ ECS cannot start a service without an image, and ECR starts empty. So:
    services. Without it, a plain `terraform apply` plans to delete all of them. Never change
    `initial_image_tag` again: CI owns the image from now on.
 
-## Deploying a new commit (until main.yml exists)
+## Deploying a new commit
 
-From the repo root, on an up-to-date, clean `main` that passed pr.yml:
+Automatic: merging to `main` runs `.github/workflows/main.yml`, which builds, scans, pushes and
+deploys every image the merge changed, then smoke-tests the site. Redeploy by hand from the Actions
+tab: Main -> Run workflow -> services `order-service` (or `all`). `DEPLOY_FREEZE=true` (repo
+variable) makes deploys wait for approval on the `aws-frozen` environment. `gh` needs
+`--repo Y2627S1-CS3219-P19/FOC` here (it otherwise picks the course template repo).
+
+Emergency fallback from the laptop (skips Trivy and the freeze), on an up-to-date, clean `main`
+that passed pr.yml:
 
 ```powershell
 .\infra\terraform\scripts\push-images.ps1 -Only order-service   # build + push the changed images
 .\infra\terraform\scripts\deploy.ps1 -Services order-service    # point ECS at them, wait until stable
 ```
 
-`deploy.ps1` does what main.yml's deploy job will do: latest task definition revision + new image
+`deploy.ps1` does what main.yml's deploy job does: latest task definition revision + new image
 (by digest) -> register -> update the service -> wait. If the new tasks fail, the circuit breaker
 rolls back and the script says so. Do not touch `initial_image_tag` for this.
-Also the way to apply a Terraform env/secret change to a running service: apply, then
-`deploy.ps1 -Services <svc>` with the commit that is already running.
+To make a Terraform env/secret change reach a running service: apply, then redeploy that service
+(Run workflow with services `<svc>`, or `deploy.ps1 -Services <svc> -Tag <running sha>`).
 
 ## Team access (read-only)
 
@@ -100,6 +107,11 @@ between sandbox accounts; then only NUS can add teammates to this account.
 
 ## Troubleshooting
 
+- **main.yml fails at configure-aws-credentials** with "Not authorized to perform
+  sts:AssumeRoleWithWebIdentity": the role's trusted `sub` does not match the token. Compare
+  `github_oidc_sub_prefix` (variables.tf) with
+  `gh api repos/Y2627S1-CS3219-P19/FOC/actions/oidc/customization/sub --jq .sub_claim_prefix`.
+  Right after changing the trust policy, wait a minute and re-run (IAM takes a moment to update).
 - **First apply in a fresh account fails** with "ECS Service Linked Role is not ready" or the NAT
   group's "Authentication Failure": AWS was still creating its service-linked roles. If the NAT
   instance is running anyway (`aws ec2 describe-instances --filters Name=tag:Name,Values=foc-nat`),
