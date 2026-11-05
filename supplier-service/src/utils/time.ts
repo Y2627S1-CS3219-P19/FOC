@@ -1,4 +1,21 @@
 /**
+ * Current wall-clock time in the given timezone, as zero-padded "HH:MM".
+ */
+export function localHHMM(referenceTime: Date = new Date(), timezone: string = 'Asia/Singapore'): string {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(referenceTime);
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  return `${hour}:${minute}`;
+}
+
+/**
  * Computes whether a stall is currently open based on operating hours (24h HH:MM format)
  * evaluated against the given timezone (default: Asia/Singapore).
  *
@@ -31,17 +48,7 @@ export function isOpenNow(
   }
 
   // Format referenceTime in the target timezone to HH:mm
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-
-  const parts = formatter.formatToParts(referenceTime);
-  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
-  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
-  const currentTime = `${hour}:${minute}`;
+  const currentTime = localHHMM(referenceTime, timezone);
 
   if (opensAt <= effectiveClosesAt) {
     // Standard daytime shift

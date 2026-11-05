@@ -42,4 +42,28 @@ Mock Stall,Food,Com 1,1,Near entrance,1.23,103.45,0800hrs,2000hrs,https://exampl
 
     if (fs.existsSync(tmpCsvPath)) fs.unlinkSync(tmpCsvPath);
   });
+
+  it('fails loudly when the seed CSV is not valid UTF-8', async () => {
+    const cp1252CsvPath = '/tmp/test-seed-cp1252.csv';
+    // "Prince George’s Park" as an Excel/Windows-1252 export writes it: 0x92, not UTF-8.
+    fs.writeFileSync(
+      cp1252CsvPath,
+      Buffer.concat([
+        Buffer.from(
+          'Name,Type,Building,Floor,Location Description,Latitude,Longitude,StartingTime,ClosingTime,ImageURL\nOctobox,Shopping,Prince George',
+          'ascii'
+        ),
+        Buffer.from([0x92]),
+        Buffer.from('s Park,2,Near PGP entrance,1.29,103.77,0000hrs,2359hrs,', 'ascii'),
+      ])
+    );
+
+    const mockInsert = vi.fn();
+    const mockDb = { insert: mockInsert } as any;
+
+    await expect(runSeed(mockDb, cp1252CsvPath)).rejects.toThrow(/not valid UTF-8/i);
+    expect(mockInsert).not.toHaveBeenCalled();
+
+    if (fs.existsSync(cp1252CsvPath)) fs.unlinkSync(cp1252CsvPath);
+  });
 });

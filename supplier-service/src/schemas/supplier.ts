@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeText } from '../utils/text.js';
 
 const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -47,11 +48,11 @@ const hoursErrorMessage = {
 
 export const createSupplierSchema = z
   .object({
-    name: z.string({ required_error: 'Name is required' }).trim().min(1, 'Name is required').max(100),
-    facilityType: z.string({ required_error: 'Facility type is required' }).trim().min(1).max(50),
-    building: z.string({ required_error: 'Building is required' }).trim().min(1).max(100),
-    floor: z.string().trim().max(10).nullable().optional(),
-    locationDescription: z.string().trim().max(300).nullable().optional(),
+    name: z.string({ required_error: 'Name is required' }).trim().min(1, 'Name is required').max(100).transform(normalizeText),
+    facilityType: z.string({ required_error: 'Facility type is required' }).trim().min(1).max(50).transform(normalizeText),
+    building: z.string({ required_error: 'Building is required' }).trim().min(1).max(100).transform(normalizeText),
+    floor: z.string().trim().max(10).transform(normalizeText).nullable().optional(),
+    locationDescription: z.string().trim().max(300).transform(normalizeText).nullable().optional(),
     latitude: z.number().min(-90).max(90).nullable().optional(),
     longitude: z.number().min(-180).max(180).nullable().optional(),
     opensAt: timeSchema('Opening time'),
@@ -64,11 +65,11 @@ export const createSupplierSchema = z
 
 export const updateSupplierSchema = z
   .object({
-    name: z.string().trim().min(1).max(100).optional(),
-    facilityType: z.string().trim().min(1).max(50).optional(),
-    building: z.string().trim().min(1).max(100).optional(),
-    floor: z.string().trim().max(10).nullable().optional(),
-    locationDescription: z.string().trim().max(300).nullable().optional(),
+    name: z.string().trim().min(1).max(100).transform(normalizeText).optional(),
+    facilityType: z.string().trim().min(1).max(50).transform(normalizeText).optional(),
+    building: z.string().trim().min(1).max(100).transform(normalizeText).optional(),
+    floor: z.string().trim().max(10).transform(normalizeText).nullable().optional(),
+    locationDescription: z.string().trim().max(300).transform(normalizeText).nullable().optional(),
     latitude: z.number().min(-90).max(90).nullable().optional(),
     longitude: z.number().min(-180).max(180).nullable().optional(),
     opensAt: z.string().trim().regex(timeRegex).optional(),
@@ -83,7 +84,7 @@ export const updateSupplierSchema = z
   .refine(hoursDiffer, hoursErrorMessage);
 
 export const listQuerySchema = z.object({
-  search: z.string().trim().max(100).optional(),
+  search: z.string().trim().max(100).transform(normalizeText).optional(),
   facilityType: z.string().trim().optional(),
   building: z.string().trim().optional(),
   status: z.enum(['active', 'open_now', 'inactive', 'all']).default('active'),
