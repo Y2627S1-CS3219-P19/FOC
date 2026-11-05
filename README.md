@@ -6,7 +6,7 @@
 students can request items to be collected from stores or facilities on
 campus, and other students can fulfil (and deliver) those requests. The
 platform runs on a closed credit economy — credits cannot be bought,
-withdrawn, or exchanged for money, and only circulate within the platform.
+withdrawn, or exchanged for money, and circulate only within the platform.
 
 ---
 
