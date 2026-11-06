@@ -31,6 +31,7 @@ describe('Slice 5: Auth & Session Introspection', () => {
         jwksUri: 'http://keycloak.mock/jwks',
         issuer: 'http://localhost:8080/realms/campuserrand',
         getJwksKeys: async () => [publicKeyJwk],
+        internalAuthSecret: 'test-internal-secret',
         introspectFn: async (token: string, secret: string) => {
           if (secret !== 'test-internal-secret') {
             return { status: 401, body: { error: { code: 'UNAUTHORIZED' } } };
