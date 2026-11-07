@@ -189,6 +189,7 @@ dl.details dd { margin: 0; }
   max-height: min(70vh, 560px); overflow-y: auto; }
 .faq-entry summary { cursor: pointer; font-weight: 600; padding: 8px 0; border-bottom: 1px dashed var(--border); }
 .faq-entry:last-of-type summary { border-bottom: none; }
+.faq-entry { scroll-margin-top: 70px; }
 
 /* ---------- Tablet / phone ---------- */
 @media (max-width: 1050px) {

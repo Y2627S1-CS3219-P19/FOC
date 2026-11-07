@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
-import { useFaq } from '../faq';
+import { faqAnchor, useFaq } from '../faq';
 
 /**
  * Floating help chat, bottom-right on every signed-in page. Escalation is user-decided:
@@ -19,6 +20,11 @@ export function FaqChatWidget() {
   const toggle = () => {
     setOpen(!open);
     if (open) faq.reset();
+  };
+
+  const close = () => {
+    setOpen(false);
+    faq.reset();
   };
 
   return (
@@ -42,7 +48,18 @@ export function FaqChatWidget() {
           {res && res.answer !== null && (
             <div className="stack">
               <p className="small">{res.answer}</p>
-              <p className="small muted">{res.citations.map((c) => `– ${c.heading}`).join('\n')}</p>
+              <p className="small muted">
+                {res.citations.map((c) => (
+                  <Link
+                    key={c.index}
+                    to={`/faq#${faqAnchor(c.source, c.heading)}`}
+                    style={{ display: 'block' }}
+                    onClick={close}
+                  >
+                    – {c.heading}
+                  </Link>
+                ))}
+              </p>
             </div>
           )}
           {refused && (

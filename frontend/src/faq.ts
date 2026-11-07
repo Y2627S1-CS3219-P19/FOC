@@ -25,6 +25,12 @@ export interface TicketCreated {
   status: string;
 }
 
+/** Stable DOM id for a KB entry, shared by the browse list and the citation links. */
+export function faqAnchor(source: string, heading: string): string {
+  const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `faq-${slug(source.replace(/\.md$/, ''))}-${slug(heading)}`;
+}
+
 /**
  * Shared ask + raise-ticket state for the FAQ page and the chat popup.
  * Escalation is user-decided: a ticket can be raised at any time, not only after a refusal.

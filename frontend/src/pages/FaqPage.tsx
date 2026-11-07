@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useApi } from '../api';
 import { useAuth } from '../auth';
 import { ErrorBox } from '../components';
-import { useFaq, type FaqEntry } from '../faq';
+import { faqAnchor, useFaq, type FaqEntry } from '../faq';
 
 /** The dedicated FAQ page: browse the knowledge base, ask the bot, or raise a support request. */
 export function FaqPage() {
@@ -12,6 +13,8 @@ export function FaqPage() {
   const [entriesError, setEntriesError] = useState<unknown>(null);
   const faq = useFaq(claims?.email);
   const [raiseOpen, setRaiseOpen] = useState(false);
+  const [openEntries, setOpenEntries] = useState<Set<string>>(new Set());
+  const location = useLocation();
 
   useEffect(() => {
     api<{ data: FaqEntry[] }>('GET', '/v1/faq/entries').then(
@@ -19,6 +22,15 @@ export function FaqPage() {
       (err) => setEntriesError(err),
     );
   }, [api]);
+
+  // A citation link (/faq#entry-id) expands and scrolls to that knowledge-base entry.
+  useEffect(() => {
+    if (!entries || !location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (!entries.some((e) => faqAnchor(e.source, e.heading) === id)) return;
+    setOpenEntries((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+    requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }, [entries, location]);
 
   const res = faq.res;
   const refused = res?.answer === null;
@@ -47,7 +59,17 @@ export function FaqPage() {
         {res && res.answer !== null && (
           <div className="stack">
             <p>{res.answer}</p>
-            <p className="small muted">{res.citations.map((c) => `– ${c.heading}`).join('\n')}</p>
+            <p className="small muted">
+              {res.citations.map((c) => (
+                <Link
+                  key={c.index}
+                  to={`/faq#${faqAnchor(c.source, c.heading)}`}
+                  style={{ display: 'block' }}
+                >
+                  – {c.heading}
+                </Link>
+              ))}
+            </p>
           </div>
         )}
         {refused && (
@@ -104,12 +126,29 @@ export function FaqPage() {
         <ErrorBox error={entriesError} />
         {!entries && !entriesError && <p className="small muted">Loading…</p>}
         {entries?.length === 0 && <p className="small muted">The knowledge base is empty.</p>}
-        {entries?.map((e) => (
-          <details key={`${e.source}#${e.heading}`} className="faq-entry">
-            <summary>{e.heading}</summary>
-            <p className="small">{e.content}</p>
-          </details>
-        ))}
+        {entries?.map((e) => {
+          const id = faqAnchor(e.source, e.heading);
+          return (
+            <details
+              key={id}
+              id={id}
+              className="faq-entry"
+              open={openEntries.has(id)}
+              onToggle={(ev) => {
+                const isOpen = ev.currentTarget.open;
+                setOpenEntries((prev) => {
+                  const next = new Set(prev);
+                  if (isOpen) next.add(id);
+                  else next.delete(id);
+                  return next;
+                });
+              }}
+            >
+              <summary>{e.heading}</summary>
+              <p className="small">{e.content}</p>
+            </details>
+          );
+        })}
       </div>
     </div>
   );
