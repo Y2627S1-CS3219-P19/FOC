@@ -16,6 +16,7 @@ locals {
   # role key => the SSM parameter names it may read
   execution_roles = merge(
     { for svc, m in local.service_secrets : svc => distinct(values(m)) },
+    { chroma = [] }, # official image, no secrets: pull + logs only
     { admin = distinct(values(local.admin_secrets)) },
   )
 }

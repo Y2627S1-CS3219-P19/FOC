@@ -116,3 +116,24 @@ variable "log_group_name" {
 variable "region" {
   type = string
 }
+
+variable "volumes" {
+  description = "Extra task-definition volumes (EFS). Each needs a matching mount_points entry."
+  type = list(object({
+    name = string
+    efs = optional(object({
+      file_system_id  = string
+      access_point_id = string
+    }))
+  }))
+  default = []
+}
+
+variable "mount_points" {
+  description = "container_path = where the volume appears inside the container; source_volume = volumes[].name."
+  type = list(object({
+    container_path = string
+    source_volume  = string
+  }))
+  default = []
+}

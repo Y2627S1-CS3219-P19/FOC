@@ -14,11 +14,11 @@ locals {
 
   service_secrets = {
     "user-service" = merge(local.app_common_secrets, {
-      DATABASE_URL                  = "/foc/user-service/DATABASE_URL"
-      KC_USER_SERVICE_CLIENT_SECRET = "/foc/keycloak/KC_USER_SERVICE_CLIENT_SECRET"
-      BOOTSTRAP_ADMIN_EMAIL         = "/foc/user-service/BOOTSTRAP_ADMIN_EMAIL"
-      BOOTSTRAP_ADMIN_USERNAME      = "/foc/user-service/BOOTSTRAP_ADMIN_USERNAME"
-      BOOTSTRAP_ADMIN_TEMP_PASSWORD = "/foc/user-service/BOOTSTRAP_ADMIN_TEMP_PASSWORD"
+      DATABASE_URL                    = "/foc/user-service/DATABASE_URL"
+      KC_USER_SERVICE_CLIENT_SECRET   = "/foc/keycloak/KC_USER_SERVICE_CLIENT_SECRET"
+      BOOTSTRAP_ADMIN_EMAIL           = "/foc/user-service/BOOTSTRAP_ADMIN_EMAIL"
+      BOOTSTRAP_ADMIN_USERNAME        = "/foc/user-service/BOOTSTRAP_ADMIN_USERNAME"
+      BOOTSTRAP_ADMIN_TEMP_PASSWORD   = "/foc/user-service/BOOTSTRAP_ADMIN_TEMP_PASSWORD"
       BOOTSTRAP_ADMIN_2_EMAIL         = "/foc/user-service/BOOTSTRAP_ADMIN_2_EMAIL"
       BOOTSTRAP_ADMIN_2_USERNAME      = "/foc/user-service/BOOTSTRAP_ADMIN_2_USERNAME"
       BOOTSTRAP_ADMIN_2_TEMP_PASSWORD = "/foc/user-service/BOOTSTRAP_ADMIN_2_TEMP_PASSWORD"
@@ -43,6 +43,10 @@ locals {
     # The broker creates user "foc" with this password on every start. Same password as in AMQP_URL.
     rabbitmq = {
       RABBITMQ_DEFAULT_PASS = "/foc/rabbitmq/RABBITMQ_DEFAULT_PASS"
+    }
+    faq-service = {
+      GEMINI_API_KEY     = "/foc/faq-service/GEMINI_API_KEY"
+      OPENROUTER_API_KEY = "/foc/faq-service/OPENROUTER_API_KEY"
     }
     gateway  = {}
     frontend = {}

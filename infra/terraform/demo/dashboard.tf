@@ -3,7 +3,7 @@
 # Console: CloudWatch > Dashboards > foc.
 
 locals {
-  ecs_services = concat(local.images, ["rabbitmq"])
+  ecs_services = concat(local.images, ["rabbitmq", "chroma"])
 
   # Only these services log JSON with a pino "level". supplier-service uses console.log.
   error_log_groups = ["user-service", "credit-service", "order-service"]
