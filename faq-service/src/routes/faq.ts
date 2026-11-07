@@ -1,11 +1,17 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { parseOrThrow } from '@foc/shared-middleware';
+import { parseOrThrow, requireRole } from '@foc/shared-middleware';
 import type { AppContext } from '../context.js';
 import { ask } from '../faq.js';
+import { newTicket } from '../tickets.js';
 
 const askSchema = z.object({ question: z.string().min(3).max(500) });
 const searchSchema = z.object({ q: z.string().min(3).max(500) });
+const ticketSchema = z.object({
+  question: z.string().min(3).max(500),
+  matchedTopics: z.array(z.string().max(200)).max(10).default([]),
+  replyTo: z.string().email().max(200).optional(),
+});
 
 export function faqRouter(ctx: AppContext): Router {
   const router = Router();
@@ -35,6 +41,35 @@ export function faqRouter(ctx: AppContext): Router {
           similarity: Number(c.similarity.toFixed(4)),
         })),
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // F28.3: login-gated support ticket. The userId comes from the verified token, never from the body.
+  router.post('/support-requests', async (req, res, next) => {
+    try {
+      const input = parseOrThrow(ticketSchema, req.body);
+      const ticket = newTicket({
+        userId: req.auth!.userId,
+        question: input.question,
+        matchedTopics: input.matchedTopics,
+        replyTo: input.replyTo,
+      });
+      await ctx.tickets.add(ticket);
+      ctx.logger.info({ ticketId: ticket.ticketId, userId: ticket.userId }, 'Support request created');
+      res.status(201).json({ ticketId: ticket.ticketId, status: ticket.status });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Admin triage list: open tickets with the reply-to address, newest first.
+  router.get('/support-requests', requireRole('admin'), async (_req, res, next) => {
+    try {
+      const tickets = await ctx.tickets.listOpen(50);
+      tickets.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      res.json({ data: tickets });
     } catch (err) {
       next(err);
     }

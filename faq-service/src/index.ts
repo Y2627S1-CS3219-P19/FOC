@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import type { AppContext } from './context.js';
 import { createChatModel, createEmbeddings } from './modelClient.js';
 import { storeRetriever } from './retrieval.js';
+import { createTicketStore } from './tickets.js';
 
 export function buildContext(config = loadConfig()): AppContext {
   const logger: Logger = createLogger('faq-service', config.logLevel);
@@ -28,6 +29,7 @@ export function buildContext(config = loadConfig()): AppContext {
     retrieve: storeRetriever(store),
     generate,
     pingStore: () => store.ping(),
+    tickets: createTicketStore(config),
   };
 }
 

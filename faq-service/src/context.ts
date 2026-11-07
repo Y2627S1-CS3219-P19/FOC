@@ -1,8 +1,8 @@
 import type { Authenticator } from '@foc/shared-middleware';
 import type { Logger } from 'pino';
-import type { Document } from '@langchain/core/documents';
 import type { Config } from './config.js';
 import type { RetrievedChunk } from './retrieval.js';
+import type { TicketStore } from './tickets.js';
 
 /** Everything the app and routes need, injected so tests can stub every piece. */
 export interface AppContext {
@@ -15,4 +15,6 @@ export interface AppContext {
   generate: (prompt: string) => Promise<string>;
   /** Health probe for the vector store. */
   pingStore: () => Promise<void>;
+  /** F28.3 support tickets, stamped with the token-verified userId. */
+  tickets: TicketStore;
 }

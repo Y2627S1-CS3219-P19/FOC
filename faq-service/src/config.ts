@@ -6,6 +6,7 @@ const EnvSchema = z.object({
   TRUST_PROXY: z.string().optional().default(''),
   CHROMA_URL: z.string().url().default('http://localhost:8000'),
   FAQ_COLLECTION: z.string().default('foc_faq'),
+  TICKET_COLLECTION: z.string().default('foc_support_tickets'),
   FAQ_TOP_K: z.coerce.number().int().min(1).max(20).default(4),
   // Minimum cosine similarity (1 - chroma distance) for an answer; below it the bot refuses.
   FAQ_SIMILARITY_FLOOR: z.coerce.number().min(0).max(1).default(0.35),
@@ -31,6 +32,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     trustProxy: e.TRUST_PROXY,
     chromaUrl: e.CHROMA_URL,
     collection: e.FAQ_COLLECTION,
+    ticketCollection: e.TICKET_COLLECTION,
     topK: e.FAQ_TOP_K,
     similarityFloor: e.FAQ_SIMILARITY_FLOOR,
     supportEmail: e.FAQ_SUPPORT_EMAIL,

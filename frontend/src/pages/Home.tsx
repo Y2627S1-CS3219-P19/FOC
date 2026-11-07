@@ -61,7 +61,7 @@ export function HomePage() {
           </Link>
         </div>
       </div>
-      <FaqCard />
+      <FaqCard email={claims?.email} />
     </div>
   );
 }

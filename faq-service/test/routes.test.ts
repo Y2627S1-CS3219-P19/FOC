@@ -9,18 +9,25 @@ import type { AppContext } from '../src/context.js';
 const config = loadConfig({ GEMINI_API_KEY: 'test', OPENROUTER_API_KEY: 'test', LOG_LEVEL: 'silent' });
 const logger = createLogger('faq-test', 'silent');
 
-/** Stub authenticator: any Bearer token is accepted; missing header -> 401 envelope. */
+/** Stub authenticator: any Bearer token accepted; token starting with 'admin' gets the admin role. */
 const stubAuth = {
-  verify: async (token: string) => ({ userId: token, emailVerified: true, roles: ['user'], token }),
+  verify: async (token: string) => ({
+    userId: token,
+    emailVerified: true,
+    roles: token.startsWith('admin') ? ['admin'] : ['user'],
+    token,
+  }),
   requireAuth: ((req, _res, next) => {
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) return next(unauthorized());
-    req.auth = { userId: header.slice(7), emailVerified: true, roles: ['user'], token: header.slice(7) };
+    const token = header.slice(7);
+    req.auth = { userId: token, emailVerified: true, roles: token.startsWith('admin') ? ['admin'] : ['user'], token };
     next();
   }) as RequestHandler,
 };
 
 function buildApp(opts: { pingOk?: boolean } = {}) {
+  const ticketRows: Parameters<typeof Object>[0][] = [];
   const ctx: AppContext = {
     config,
     logger,
@@ -33,6 +40,13 @@ function buildApp(opts: { pingOk?: boolean } = {}) {
     generate: async () => 'Answer [1]',
     pingStore: async () => {
       if (!opts.pingOk) throw new Error('chroma down');
+    },
+    tickets: {
+      add: async (t) => {
+        ticketRows.push(t);
+      },
+      listOpen: async () => ticketRows as never,
+      ping: async () => {},
     },
   };
   return createApp(ctx);
@@ -77,5 +91,40 @@ describe('FAQ routes', () => {
     expect((await request(buildApp({ pingOk: true })).get('/health/ready')).status).toBe(200);
     const down = await request(buildApp({ pingOk: false })).get('/health/ready');
     expect(down.status).toBe(503);
+  });
+
+  it('creates a support ticket stamped with the token-verified userId (F28.3)', async () => {
+    const res = await request(buildApp())
+      .post('/v1/faq/support-requests')
+      .set('Authorization', 'Bearer user-42')
+      .send({ question: 'My runner never delivered', matchedTopics: ['h0'], replyTo: 'me@u.nus.edu' });
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('open');
+    expect(res.body.ticketId).toMatch(/^t-/);
+  });
+
+  it('rejects a support ticket without a token and validates replyTo', async () => {
+    const anon = await request(buildApp())
+      .post('/v1/faq/support-requests')
+      .send({ question: 'My runner never delivered' });
+    expect(anon.status).toBe(401);
+    const bad = await request(buildApp())
+      .post('/v1/faq/support-requests')
+      .set('Authorization', 'Bearer user-42')
+      .send({ question: 'My runner never delivered', replyTo: 'not-an-email' });
+    expect(bad.status).toBe(422);
+  });
+
+  it('lists open tickets for admins only', async () => {
+    const app = buildApp();
+    await request(app)
+      .post('/v1/faq/support-requests')
+      .set('Authorization', 'Bearer user-42')
+      .send({ question: 'My runner never delivered', replyTo: 'me@u.nus.edu' });
+    const user = await request(app).get('/v1/faq/support-requests').set('Authorization', 'Bearer user-42');
+    expect(user.status).toBe(403);
+    const admin = await request(app).get('/v1/faq/support-requests').set('Authorization', 'Bearer admin-1');
+    expect(admin.status).toBe(200);
+    expect(admin.body.data[0]).toMatchObject({ userId: 'user-42', replyTo: 'me@u.nus.edu', status: 'open' });
   });
 });
