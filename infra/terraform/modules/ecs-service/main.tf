@@ -23,6 +23,21 @@ resource "aws_ecs_task_definition" "this" {
     cpu_architecture        = "X86_64" # Fargate Spot is x86 only
   }
 
+  dynamic "volume" {
+    for_each = var.volumes
+    content {
+      name = volume.value.name
+      efs_volume_configuration {
+        file_system_id     = volume.value.efs.file_system_id
+        transit_encryption = "ENABLED"
+        authorization_config {
+          access_point_id = volume.value.efs.access_point_id
+          iam             = "DISABLED" # default EFS policy: authorized by network + POSIX, no task role
+        }
+      }
+    }
+  }
+
   container_definitions = jsonencode([{
     name      = var.name
     image     = var.image
@@ -43,6 +58,8 @@ resource "aws_ecs_task_definition" "this" {
       retries     = 5
       startPeriod = var.health_check_start_period
     }
+
+    mountPoints = [for m in var.mount_points : { containerPath = m.container_path, sourceVolume = m.source_volume }]
 
     logConfiguration = {
       logDriver = "awslogs"

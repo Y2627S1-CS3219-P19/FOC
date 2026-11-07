@@ -148,6 +148,7 @@ jobs:
           docker run --rm
           --add-host user-service:127.0.0.1 --add-host supplier-service:127.0.0.1
           --add-host credit-service:127.0.0.1 --add-host order-service:127.0.0.1
+          --add-host faq-service:127.0.0.1
           --add-host frontend:127.0.0.1
           foc-ci/gateway nginx -t
 

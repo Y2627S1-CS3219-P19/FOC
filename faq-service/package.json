@@ -1,0 +1,34 @@
+{
+  "name": "faq-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FoC FAQ Service - RAG-based customer relations chatbot (F28)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "ingest": "tsx scripts/ingest.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@foc/shared-middleware": "*",
+    "@langchain/core": "^1.3.0",
+    "@langchain/google-genai": "^2.3.4",
+    "@langchain/openai": "^1.8.0",
+    "chromadb": "^3.5.0",
+    "express": "^5.1.0",
+    "pg": "^8.23.1",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.1",
+    "tsx": "^4.20.3",
+    "vitest": "^3.2.4"
+  }
+}

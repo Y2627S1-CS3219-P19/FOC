@@ -58,6 +58,7 @@ Set-Secret '/foc/user-service/DATABASE_URL'     { "postgres://users:$(New-Secret
 Set-Secret '/foc/supplier-service/DATABASE_URL' { "postgres://suppliers:$(New-Secret)@${rds}:5432/suppliers_db?sslmode=require" }
 Set-Secret '/foc/credit-service/DATABASE_URL'   { "postgres://credits:$(New-Secret)@${rds}:5432/credits_db?sslmode=no-verify" }
 Set-Secret '/foc/order-service/DATABASE_URL'    { "postgres://orders:$(New-Secret)@${rds}:5432/orders_db?sslmode=no-verify" }
+Set-Secret '/foc/faq-service/DATABASE_URL'      { "postgres://faq:$(New-Secret)@${rds}:5432/faq_db?sslmode=no-verify" }
 Set-Secret '/foc/keycloak/KC_DB_PASSWORD'       { New-Secret }
 
 # RabbitMQ container (Service Connect name rabbitmq:5672): user "foc", one password in two parameters.
@@ -77,6 +78,11 @@ Set-Secret '/foc/keycloak/KC_BOOTSTRAP_ADMIN_PASSWORD'   { New-Secret }
 # Gmail SMTP login. Google shows the app password as 4 groups of 4; the spaces are removed here.
 Set-Secret '/foc/keycloak/SMTP_USER'     { Read-Required 'Gmail address Keycloak sends from (same as email_from_address)' }
 Set-Secret '/foc/keycloak/SMTP_PASSWORD' { (Read-Required 'Gmail app password (16 letters)' -Hidden) -replace '\s', '' }
+
+# FAQ RAG service (F28). The model API keys are entered by whoever runs the script —
+# never generated, never printed.
+Set-Secret '/foc/faq-service/GEMINI_API_KEY'     { Read-Required 'Gemini API key (aistudio.google.com/apikey)' -Hidden }
+Set-Secret '/foc/faq-service/OPENROUTER_API_KEY' { Read-Required 'OpenRouter API key (openrouter.ai/keys)' -Hidden }
 
 # First two FoC admins (F29.3), created by user-service on its first start.
 Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_EMAIL'         { Read-Required 'First FoC admin email (@u.nus.edu)' }
