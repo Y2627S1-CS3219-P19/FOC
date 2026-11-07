@@ -18,7 +18,7 @@ const EnvSchema = z.object({
   KEYCLOAK_INTERNAL_URL: z.string().url().default('http://localhost:8080'),
   KEYCLOAK_PUBLIC_URL: z.string().url().default('http://localhost:8080'),
   KEYCLOAK_REALM: z.string().default('campuserrand'),
-  ALLOWED_TOKEN_CLIENTS: z.string().default('campuserrand-spa'),
+  ALLOWED_TOKEN_CLIENTS: z.string().default('campuserrand-spa,campuserrand-test'),
 });
 
 export type Config = ReturnType<typeof loadConfig>;

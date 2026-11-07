@@ -308,7 +308,6 @@ services:
       KEYCLOAK_INTERNAL_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
       KEYCLOAK_REALM: campuserrand
-      ALLOWED_TOKEN_CLIENTS: campuserrand-spa
       TRUST_PROXY: "1"
     # No host port: only reachable through the gateway (gateway/nginx.conf, /v1/faq).
     depends_on:

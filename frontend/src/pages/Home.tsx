@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
 import { MAILPIT_URL } from '../config';
 import { useWallet } from '../errands';
+import { FaqCard } from './FaqCard';
 
 export function HomePage() {
   const { user, login, claims } = useAuth();
@@ -60,6 +61,7 @@ export function HomePage() {
           </Link>
         </div>
       </div>
+      <FaqCard />
     </div>
   );
 }
