@@ -78,6 +78,11 @@ Set-Secret '/foc/keycloak/KC_BOOTSTRAP_ADMIN_PASSWORD'   { New-Secret }
 Set-Secret '/foc/keycloak/SMTP_USER'     { Read-Required 'Gmail address Keycloak sends from (same as email_from_address)' }
 Set-Secret '/foc/keycloak/SMTP_PASSWORD' { (Read-Required 'Gmail app password (16 letters)' -Hidden) -replace '\s', '' }
 
+# FAQ RAG service (F28). The model API keys are entered by whoever runs the script —
+# never generated, never printed.
+Set-Secret '/foc/faq-service/GEMINI_API_KEY'     { Read-Required 'Gemini API key (aistudio.google.com/apikey)' -Hidden }
+Set-Secret '/foc/faq-service/OPENROUTER_API_KEY' { Read-Required 'OpenRouter API key (openrouter.ai/keys)' -Hidden }
+
 # First two FoC admins (F29.3), created by user-service on its first start.
 Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_EMAIL'         { Read-Required 'First FoC admin email (@u.nus.edu)' }
 Set-Secret '/foc/user-service/BOOTSTRAP_ADMIN_USERNAME'      { 'admin' }
