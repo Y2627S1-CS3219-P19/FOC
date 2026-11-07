@@ -29,14 +29,14 @@ async function main() {
   const ctx = buildContext();
   console.log('=== ANSWERABLE (expect answer + citations) ===');
   for (const q of ANSWERABLE) {
-    const res = await ask(ctx, q, 'gate-user');
+    const res = await ask(ctx, q);
     if (res.answer === null) console.log(`REFUSED (unexpected) "${q}"`);
     else console.log(`OK "${q}" -> ${JSON.stringify(res.citations)} :: ${res.answer.slice(0, 110).replace(/\n/g, ' ')}`);
   }
   console.log('=== OUT-OF-CORPUS (expect refusal) ===');
   let refused = 0;
   for (const q of OOC) {
-    const res = await ask(ctx, q, 'gate-user');
+    const res = await ask(ctx, q);
     if (res.answer === null) {
       refused++;
       console.log(`OK refusal "${q}" (suggestions: ${res.suggestions.length})`);

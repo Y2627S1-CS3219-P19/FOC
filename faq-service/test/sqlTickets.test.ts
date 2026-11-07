@@ -25,21 +25,24 @@ describe.skipIf(!TEST_DB_URL)('SqlTicketStore (faq_db)', () => {
   afterAll(() => stop?.());
 
   it('adds a ticket with an implicit creation history row and lists it newest first', async () => {
-    const t = newTicket({ userId: 'u1', question: 'Where did my credits go?', matchedTopics: ['credits'], replyTo: 'a@u.nus.edu' });
+    const t = newTicket({ question: 'Where did my credits go?', matchedTopics: ['credits'], replyTo: 'a@u.nus.edu' });
     await store.add(t);
-    const later = newTicket({ userId: 'u2', question: 'Runner never delivered', matchedTopics: [] });
+    const later = newTicket({ question: 'Runner never delivered', matchedTopics: [] });
     await store.add(later);
 
     const list = await store.list(50);
     expect(list[0].ticketId).toBe(later.ticketId);
     const first = list.find((x) => x.ticketId === t.ticketId)!;
     expect(first.status).toBe('open');
+    // Data minimisation: no requester identity is stored on the ticket.
+    expect(first).not.toHaveProperty('userId');
+    expect(first.replyTo).toBe('a@u.nus.edu');
     expect(first.history).toHaveLength(1);
     expect(first.history[0]).toMatchObject({ fromStatus: null, toStatus: 'open', adminId: null });
   });
 
   it('appends a history row per transition and never rewrites previous ones', async () => {
-    const t = newTicket({ userId: 'u1', question: 'Another ticket', matchedTopics: [] });
+    const t = newTicket({ question: 'Another ticket', matchedTopics: [] });
     await store.add(t);
 
     const afterReview = await store.updateStatus(t.ticketId, 'under_review', ['open', 'under_review'], 'admin-1');
@@ -57,7 +60,7 @@ describe.skipIf(!TEST_DB_URL)('SqlTicketStore (faq_db)', () => {
   it('returns null for an unknown ticket and rejects a transition from a terminal state', async () => {
     expect(await store.updateStatus('t-nope', 'resolved', ['open', 'under_review'], 'admin-1')).toBeNull();
 
-    const t = newTicket({ userId: 'u1', question: 'Done already', matchedTopics: [] });
+    const t = newTicket({ question: 'Done already', matchedTopics: [] });
     await store.add(t);
     await store.updateStatus(t.ticketId, 'resolved', ['open', 'under_review'], 'admin-1');
     await expect(store.updateStatus(t.ticketId, 'under_review', ['open', 'under_review'], 'admin-1')).rejects.toThrow();

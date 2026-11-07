@@ -28,7 +28,7 @@ export function faqRouter(ctx: AppContext): Router {
   router.post('/ask', async (req, res, next) => {
     try {
       const { question } = parseOrThrow(askSchema, req.body);
-      const response = await ask(ctx, question, req.auth!.userId);
+      const response = await ask(ctx, question);
       res.json(response);
     } catch (err) {
       next(err);
@@ -62,18 +62,18 @@ export function faqRouter(ctx: AppContext): Router {
     }
   });
 
-  // F28.3: login-gated support ticket. The userId comes from the verified token, never from the body.
+  // F28.3: login-gated support ticket. The requester is authenticated but not recorded; the
+  // reply-to address they give is the only contact stored.
   router.post('/support-requests', async (req, res, next) => {
     try {
       const input = parseOrThrow(ticketSchema, req.body);
       const ticket = newTicket({
-        userId: req.auth!.userId,
         question: input.question,
         matchedTopics: input.matchedTopics,
         replyTo: input.replyTo,
       });
       await ctx.tickets.add(ticket);
-      ctx.logger.info({ ticketId: ticket.ticketId, userId: ticket.userId }, 'Support request created');
+      ctx.logger.info({ ticketId: ticket.ticketId }, 'Support request created');
       res.status(201).json({ ticketId: ticket.ticketId, status: ticket.status });
     } catch (err) {
       next(err);

@@ -15,7 +15,7 @@ export interface FaqAnswer {
 export interface FaqRefusal {
   answer: null;
   suggestions: { source: string; heading: string }[];
-  escalation: { question: string; matchedTopics: string[]; userId: string };
+  escalation: { question: string; matchedTopics: string[] };
 }
 
 export type FaqResponse = FaqAnswer | FaqRefusal;
@@ -43,7 +43,6 @@ export interface TicketHistoryEntry {
 
 export interface FaqTicket {
   ticketId: string;
-  userId: string;
   question: string;
   matchedTopics: string[];
   replyTo?: string;

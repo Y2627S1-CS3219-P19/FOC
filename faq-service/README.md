@@ -7,10 +7,11 @@ refusal with the nearest topics and an escalation payload (F28.3).
 - **F28.1** knowledge base: `corpus/faq.md` (primary, hand-written) — one chunk per `## heading`.
 - **F28.2** conversational assistance: `POST /v1/faq/ask` — retrieve top-k from Chroma, generate
   with a strict "answer only from these passages, cite them" prompt.
-- **F28.3** support escalation: login-gated server-side tickets. `POST /v1/faq/support-requests`
-  stamps the userId from the verified token (never the body); `replyTo` is pre-filled in the UI
-  from the token's verified email claim and is a reply-to convenience only. Admins triage via
-  `GET /v1/faq/support-requests` (admin-only) and reach the user at their registered email.
+- **F28.3** support escalation: login-gated server-side tickets. The requester must be logged in,
+  but no requester identity is stored — `replyTo` (pre-filled in the UI from the token's verified
+  email claim) is the only contact. Data minimisation on purpose: the service keeps no user ids.
+  Admin actions *are* attributed (`admin_id` in the history) because that is the accountability
+  trail. Admins triage via `GET /v1/faq/support-requests` (admin-only).
 
 ## Stack
 
@@ -74,7 +75,7 @@ All require a bearer token (`requireAuth`, Keycloak) and use the shared error en
 | `POST /v1/faq/ask` | grounded answer with citations, or a refusal with suggestions + escalation data |
 | `GET /v1/faq/search?q=` | raw retrieval (no LLM call) |
 | `GET /v1/faq/entries` | the full knowledge base, for the FAQ page's browse list |
-| `POST /v1/faq/support-requests` | create a support ticket (userId from the token) |
+| `POST /v1/faq/support-requests` | create a support ticket (login required; no user id stored) |
 | `GET /v1/faq/support-requests` | admin-only triage list (all statuses, newest first, with history) |
 | `PATCH /v1/faq/support-requests/:id` | admin-only status transition (`under_review` or `resolved`) |
 
@@ -135,5 +136,5 @@ docker compose up -d --build chroma faq-service   # or the whole stack — KB bu
 ```
 
 API: see the endpoints table above. A refusal carries
-`{ answer: null, suggestions[], escalation: { question, matchedTopics, userId } }`. Docs of the
+`{ answer: null, suggestions[], escalation: { question, matchedTopics } }`. Docs of the
 error envelope match every other FoC service.

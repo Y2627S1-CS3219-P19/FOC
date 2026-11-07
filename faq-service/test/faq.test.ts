@@ -81,9 +81,14 @@ async function setup(opts: { floor?: number; answer?: string } = {}) {
     ...loadConfig({ GEMINI_API_KEY: 'test', OPENROUTER_API_KEY: 'test', FAQ_DATABASE_URL: 'postgres://faq:test@localhost:5438/faq_db' }),
     similarityFloor: opts.floor ?? 0.35,
   };
+  const events: Record<string, unknown>[] = [];
   const ctx = {
     config,
-    logger: createLogger('faq-test', 'silent'),
+    // Spy logger: the ask event is the observability seam, so tests assert on its shape.
+    logger: {
+      info: (obj: Record<string, unknown>, msg: string) => events.push({ ...obj, msg }),
+    } as unknown as ReturnType<typeof createLogger>,
+    events,
     retrieve,
     prompts,
     generate: async (prompt: string) => {
@@ -97,7 +102,7 @@ async function setup(opts: { floor?: number; answer?: string } = {}) {
 describe('ask (RAG core, offline with fakes)', () => {
   it('returns a grounded answer with citations when retrieval is confident', async () => {
     const ctx = await setup();
-    const res = await ask(ctx, 'credits', 'user-1');
+    const res = await ask(ctx, 'credits');
     expect(res.answer).toBe('Grounded answer [1]');
     if (res.answer !== null) {
       expect(res.citations[0]).toMatchObject({ index: 1, source: 'faq.md', heading: 'What are credits?' });
@@ -114,7 +119,7 @@ describe('ask (RAG core, offline with fakes)', () => {
       ['stages', 'What are the stages of an errand?'],
       ['email', 'Why do I need a @u.nus.edu email?'],
     ] as const) {
-      const res = await ask(ctx, question, 'user-1');
+      const res = await ask(ctx, question);
       expect(res.answer).not.toBeNull();
       if (res.answer !== null) expect(res.citations[0].heading).toBe(expected);
     }
@@ -122,11 +127,12 @@ describe('ask (RAG core, offline with fakes)', () => {
 
   it('refuses with the escalation payload for out-of-corpus questions', async () => {
     const ctx = await setup();
-    const res = await ask(ctx, 'quantum physics', 'user-9');
+    const res = await ask(ctx, 'quantum physics');
     expect(res.answer).toBeNull();
     // Escalation carries the question, the nearest (low-confidence) topics and who asked.
     expect(res.escalation?.question).toBe('quantum physics');
-    expect(res.escalation?.userId).toBe('user-9');
+    // No requester identity in the escalation payload.
+    expect(res.escalation).not.toHaveProperty('userId');
     expect(res.escalation!.matchedTopics.length).toBeLessThanOrEqual(4);
     expect(res.suggestions!.length).toBeLessThanOrEqual(3);
   });
@@ -134,21 +140,21 @@ describe('ask (RAG core, offline with fakes)', () => {
   it('refuses a partial match below the floor but answers it above the floor', async () => {
     // 'credit-ish' is a near match (0.8) for the credits chunk, not an exact one.
     const refuseCtx = await setup({ floor: 0.85 });
-    expect((await ask(refuseCtx, 'credit-ish', 'user-1')).answer).toBeNull();
+    expect((await ask(refuseCtx, 'credit-ish')).answer).toBeNull();
     const answerCtx = await setup({ floor: 0.7 });
-    expect((await ask(answerCtx, 'credit-ish', 'user-1')).answer).not.toBeNull();
+    expect((await ask(answerCtx, 'credit-ish')).answer).not.toBeNull();
   });
 
   it('turns an "I do not know" model reply into a refusal', async () => {
     const ctx = await setup({ answer: 'I do not know.' });
-    const res = await ask(ctx, 'credits', 'user-1');
+    const res = await ask(ctx, 'credits');
     expect(res.answer).toBeNull();
-    expect(res.escalation?.userId).toBe('user-1');
+    expect(res.escalation?.question).toBe('credits');
   });
 
   it('maps cited indexes to the right chunks', async () => {
     const ctx = await setup({ answer: 'See [2] and [1]' });
-    const res = await ask(ctx, 'credits', 'user-1');
+    const res = await ask(ctx, 'credits');
     if (res.answer === null) throw new Error('expected an answer');
     expect(res.citations.map((c) => c.index)).toEqual([1, 2]);
     expect(res.citations[1].heading).toBe('What are the stages of an errand?');
@@ -156,9 +162,21 @@ describe('ask (RAG core, offline with fakes)', () => {
 
   it('is deterministic: the same question twice returns byte-identical JSON', async () => {
     const ctx = await setup();
-    const a = JSON.stringify(await ask(ctx, 'credits', 'user-1'));
-    const b = JSON.stringify(await ask(ctx, 'credits', 'user-1'));
+    const a = JSON.stringify(await ask(ctx, 'credits'));
+    const b = JSON.stringify(await ask(ctx, 'credits'));
     expect(a).toBe(b);
+  });
+
+  it('emits the ask event with quality fields but no user identity', async () => {
+    const ctx = await setup();
+    await ask(ctx, 'credits');
+    const event = ctx.events[0];
+    // The CloudWatch metric filters depend on these fields.
+    expect(event).toMatchObject({ msg: 'faq ask', refused: false });
+    expect(event).toHaveProperty('top1Similarity');
+    expect(event).toHaveProperty('durationMs');
+    expect(event).toHaveProperty('similarityFloor');
+    expect(event).not.toHaveProperty('userId');
   });
 });
 

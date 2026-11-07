@@ -74,7 +74,6 @@ export function AdminFaqTicketsPage() {
             <tr>
               <th>When</th>
               <th>Ticket</th>
-              <th>User</th>
               <th>Question</th>
               <th>Closest topics</th>
               <th>Reply-to</th>
@@ -90,9 +89,6 @@ export function AdminFaqTicketsPage() {
                   {t.resolvedAt && (
                     <div className="small muted">resolved by {shortId(t.resolvedBy ?? '')}</div>
                   )}
-                </td>
-                <td data-label="User" title={t.userId}>
-                  {shortId(t.userId)}
                 </td>
                 <td data-label="Question">{t.question}</td>
                 <td data-label="Closest topics">{t.matchedTopics.length ? t.matchedTopics.join(' · ') : '—'}</td>

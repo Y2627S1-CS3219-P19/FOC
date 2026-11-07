@@ -16,7 +16,7 @@ export interface AppContext {
   generate: (prompt: string) => Promise<string>;
   /** Health probe for the vector store. */
   pingStore: () => Promise<void>;
-  /** F28.3 support tickets, stamped with the token-verified userId. */
+  /** F28.3 support tickets. No requester identity is stored: reply-to is the only contact. */
   tickets: TicketStore;
   /** The full knowledge base as entries, for the FAQ page's browse list. */
   listEntries: () => Promise<FaqEntry[]>;

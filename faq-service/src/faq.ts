@@ -16,7 +16,7 @@ export interface FaqAnswer {
 export interface FaqRefusal {
   answer: null;
   suggestions: { source: string; heading: string }[];
-  escalation: { question: string; matchedTopics: string[]; userId: string };
+  escalation: { question: string; matchedTopics: string[] };
 }
 
 export type FaqResponse = FaqAnswer | FaqRefusal;
@@ -57,7 +57,6 @@ function citedIndexes(answer: string, chunkCount: number): number[] {
 export async function ask(
   ctx: Pick<AppContext, 'config' | 'generate' | 'logger'> & { retrieve: Retrieve },
   question: string,
-  userId: string,
 ): Promise<FaqResponse> {
   const { retrieve, config, generate } = ctx;
   const start = Date.now();
@@ -74,7 +73,6 @@ export async function ask(
         durationMs: Date.now() - start,
         retrieved: chunks.map((c) => c.doc.metadata.heading as string),
         models: { embed: config.embedModel, gen: config.genModel },
-        userId,
       },
       'faq ask',
     );
@@ -91,7 +89,6 @@ export async function ask(
       escalation: {
         question,
         matchedTopics: chunks.map((c) => c.doc.metadata.heading as string),
-        userId,
       },
     });
   }
@@ -104,7 +101,7 @@ export async function ask(
         source: c.doc.metadata.source as string,
         heading: c.doc.metadata.heading as string,
       })),
-      escalation: { question, matchedTopics: chunks.map((c) => c.doc.metadata.heading as string), userId },
+      escalation: { question, matchedTopics: chunks.map((c) => c.doc.metadata.heading as string) },
     });
   }
 

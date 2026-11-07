@@ -1,10 +1,11 @@
 -- FAQ support tickets (F28.3). The ticket's `status` is a cache of the latest history row for
 -- cheap filtering; ticket_status_history is the source of truth and is insert-only: the app
 -- never UPDATEs or DELETEs history.
+-- No requester identity is stored: the reply-to address is the only contact. Admin actions ARE
+-- attributed (admin_id), because that is the accountability trail.
 
 CREATE TABLE IF NOT EXISTS tickets (
   ticket_id       text PRIMARY KEY,
-  user_id         text NOT NULL,
   question        text NOT NULL,
   matched_topics  jsonb NOT NULL DEFAULT '[]',
   reply_to        text,

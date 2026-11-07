@@ -14,7 +14,6 @@ export interface TicketStatusHistoryEntry {
 
 export interface SupportTicket {
   ticketId: string;
-  userId: string;
   question: string;
   matchedTopics: string[];
   replyTo?: string;
@@ -43,7 +42,6 @@ export interface TicketStore {
 
 interface TicketRow {
   ticket_id: string;
-  user_id: string;
   question: string;
   matched_topics: string[];
   reply_to: string | null;
@@ -60,7 +58,6 @@ const iso = (d: Date | null | undefined) => (d ? new Date(d).toISOString() : und
 function toTicket(row: TicketRow): SupportTicket {
   return {
     ticketId: row.ticket_id,
-    userId: row.user_id,
     question: row.question,
     matchedTopics: row.matched_topics ?? [],
     replyTo: row.reply_to ?? undefined,
@@ -76,7 +73,7 @@ function toTicket(row: TicketRow): SupportTicket {
 }
 
 const LIST_SQL = `
-  SELECT t.ticket_id, t.user_id, t.question, t.matched_topics, t.reply_to, t.status,
+  SELECT t.ticket_id, t.question, t.matched_topics, t.reply_to, t.status,
          t.created_at, t.updated_at, t.resolved_by, t.resolved_at,
          h.history
   FROM tickets t
@@ -100,9 +97,9 @@ export class SqlTicketStore implements TicketStore {
     try {
       await client.query('BEGIN');
       await client.query(
-        `INSERT INTO tickets (ticket_id, user_id, question, matched_topics, reply_to, status)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [ticket.ticketId, ticket.userId, ticket.question, JSON.stringify(ticket.matchedTopics), ticket.replyTo ?? null, 'open'],
+        `INSERT INTO tickets (ticket_id, question, matched_topics, reply_to, status)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [ticket.ticketId, ticket.question, JSON.stringify(ticket.matchedTopics), ticket.replyTo ?? null, 'open'],
       );
       // Implicit creation row: the history starts at birth, not at the first transition.
       await client.query(`INSERT INTO ticket_status_history (ticket_id, from_status, to_status) VALUES ($1, NULL, 'open')`, [
@@ -173,11 +170,10 @@ export class SqlTicketStore implements TicketStore {
   }
 }
 
-export function newTicket(input: { userId: string; question: string; matchedTopics: string[]; replyTo?: string }): SupportTicket {
+export function newTicket(input: { question: string; matchedTopics: string[]; replyTo?: string }): SupportTicket {
   const now = new Date().toISOString();
   return {
     ticketId: `t-${randomUUID().slice(0, 8)}`,
-    userId: input.userId,
     question: input.question,
     matchedTopics: input.matchedTopics,
     replyTo: input.replyTo,

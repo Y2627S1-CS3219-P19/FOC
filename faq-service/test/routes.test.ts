@@ -165,7 +165,7 @@ describe('FAQ routes', () => {
     expect(down.status).toBe(503);
   });
 
-  it('creates a support ticket stamped with the token-verified userId (F28.3)', async () => {
+  it('creates a support ticket without storing the requester identity (F28.3)', async () => {
     const res = await request(build())
       .post('/v1/faq/support-requests')
       .set('Authorization', 'Bearer user-42')
@@ -173,6 +173,8 @@ describe('FAQ routes', () => {
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('open');
     expect(res.body.ticketId).toMatch(/^t-/);
+    // Data minimisation: the requester id is never echoed or persisted.
+    expect(res.body).not.toHaveProperty('userId');
   });
 
   it('rejects a support ticket without a token and validates replyTo', async () => {
@@ -197,7 +199,9 @@ describe('FAQ routes', () => {
     expect(user.status).toBe(403);
     const admin = await request(app).get('/v1/faq/support-requests').set('Authorization', 'Bearer admin-1');
     expect(admin.status).toBe(200);
-    expect(admin.body.data[0]).toMatchObject({ userId: 'user-42', replyTo: 'me@u.nus.edu', status: 'open' });
+    expect(admin.body.data[0]).toMatchObject({ replyTo: 'me@u.nus.edu', status: 'open' });
+    // No requester identity is stored; the reply-to address is the only contact.
+    expect(admin.body.data[0]).not.toHaveProperty('userId');
     // The implicit creation row is already in the history.
     expect(admin.body.data[0].history).toHaveLength(1);
     expect(admin.body.data[0].history[0]).toMatchObject({ fromStatus: null, toStatus: 'open' });
