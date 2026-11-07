@@ -48,6 +48,9 @@ function buildApp(opts: { pingOk?: boolean } = {}) {
       listOpen: async () => ticketRows as never,
       ping: async () => {},
     },
+    listEntries: async () => [
+      { source: 'faq.md', heading: 'What are credits?', content: 'Credits are the platform payment.' },
+    ],
   };
   return createApp(ctx);
 }
@@ -62,6 +65,15 @@ describe('FAQ routes', () => {
   it('rejects an unauthenticated search with the standard 401 envelope', async () => {
     const res = await request(buildApp()).get('/v1/faq/search?q=credits');
     expect(res.status).toBe(401);
+  });
+
+  it('returns the knowledge-base entries for the browse list, auth required', async () => {
+    const anon = await request(buildApp()).get('/v1/faq/entries');
+    expect(anon.status).toBe(401);
+    const res = await request(buildApp()).get('/v1/faq/entries').set('Authorization', 'Bearer user-1');
+    expect(res.status).toBe(200);
+    expect(res.body.data[0]).toMatchObject({ source: 'faq.md', heading: 'What are credits?' });
+    expect(typeof res.body.data[0].content).toBe('string');
   });
 
   it('answers an authenticated ask with citations', async () => {

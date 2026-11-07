@@ -1,5 +1,6 @@
 import type { Authenticator } from '@foc/shared-middleware';
 import type { Logger } from 'pino';
+import type { FaqEntry } from './corpus.js';
 import type { Config } from './config.js';
 import type { RetrievedChunk } from './retrieval.js';
 import type { TicketStore } from './tickets.js';
@@ -17,4 +18,6 @@ export interface AppContext {
   pingStore: () => Promise<void>;
   /** F28.3 support tickets, stamped with the token-verified userId. */
   tickets: TicketStore;
+  /** The full knowledge base as entries, for the FAQ page's browse list. */
+  listEntries: () => Promise<FaqEntry[]>;
 }

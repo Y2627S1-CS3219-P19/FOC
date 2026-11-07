@@ -1,9 +1,11 @@
 import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { createAuthenticator, createLogger } from '@foc/shared-middleware';
 import type { Logger } from 'pino';
 import { createApp } from './app.js';
 import { createVectorStore } from './chroma.js';
 import { loadConfig } from './config.js';
+import { loadCorpusEntries } from './corpus.js';
 import type { AppContext } from './context.js';
 import { createChatModel, createEmbeddings } from './modelClient.js';
 import { storeRetriever } from './retrieval.js';
@@ -30,6 +32,7 @@ export function buildContext(config = loadConfig()): AppContext {
     generate,
     pingStore: () => store.ping(),
     tickets: createTicketStore(config),
+    listEntries: async () => loadCorpusEntries(join(import.meta.dirname, '..', 'corpus')),
   };
 }
 

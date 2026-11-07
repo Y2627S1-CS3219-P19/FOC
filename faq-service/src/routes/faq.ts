@@ -46,6 +46,15 @@ export function faqRouter(ctx: AppContext): Router {
     }
   });
 
+  // The FAQ page's browse list IS the knowledge base, so it can never drift from what the bot cites.
+  router.get('/entries', async (_req, res, next) => {
+    try {
+      res.json({ data: await ctx.listEntries() });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // F28.3: login-gated support ticket. The userId comes from the verified token, never from the body.
   router.post('/support-requests', async (req, res, next) => {
     try {

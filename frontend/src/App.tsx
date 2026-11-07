@@ -11,6 +11,8 @@ import { AdminUsersPage } from './pages/AdminUsers';
 import { BoardPage } from './pages/Board';
 import { CreditsPage } from './pages/Credits';
 import { ErrandDetailPage } from './pages/ErrandDetail';
+import { FaqChatWidget } from './pages/FaqChatWidget';
+import { FaqPage } from './pages/FaqPage';
 import { HomePage } from './pages/Home';
 import { MyErrandsPage } from './pages/MyErrands';
 import { NewErrandPage } from './pages/NewErrand';
@@ -102,6 +104,9 @@ export function App() {
               <NavLink to="/credits" onClick={close}>
                 Credits
               </NavLink>
+              <NavLink to="/faq" onClick={close}>
+                FAQ
+              </NavLink>
               <NavLink to="/profile" onClick={close}>
                 Me
               </NavLink>
@@ -152,6 +157,7 @@ export function App() {
           <Route path="/errands/new" element={<RequireLogin><NewErrandPage /></RequireLogin>} />
           <Route path="/errands/:id" element={<RequireLogin><ErrandDetailPage /></RequireLogin>} />
           <Route path="/credits" element={<RequireLogin><CreditsPage /></RequireLogin>} />
+          <Route path="/faq" element={<RequireLogin><FaqPage /></RequireLogin>} />
           <Route path="/suppliers" element={<RequireLogin><SuppliersPage /></RequireLogin>} />
           <Route path="/suppliers/new" element={<RequireAdmin><SupplierFormPage /></RequireAdmin>} />
           <Route path="/suppliers/:id" element={<RequireLogin><SupplierDetailPage /></RequireLogin>} />
@@ -165,6 +171,7 @@ export function App() {
         </Routes>
       </main>
       {user && <TabBar />}
+      {user && <FaqChatWidget />}
     </>
   );
 }
