@@ -7,9 +7,10 @@ refusal with the nearest topics and an escalation payload (F28.3).
 - **F28.1** knowledge base: `corpus/faq.md` (primary, hand-written) — one chunk per `## heading`.
 - **F28.2** conversational assistance: `POST /v1/faq/ask` — retrieve top-k from Chroma, generate
   with a strict "answer only from these passages, cite them" prompt.
-- **F28.3** support escalation: refusals carry `{ escalation: { question, matchedTopics, userId } }`;
-  the frontend turns that into a prefilled support email (mailto; server-side SES is the documented
-  production path).
+- **F28.3** support escalation: login-gated server-side tickets. `POST /v1/faq/support-requests`
+  stamps the userId from the verified token (never the body); `replyTo` is pre-filled in the UI
+  from the token's verified email claim and is a reply-to convenience only. Admins triage via
+  `GET /v1/faq/support-requests` (admin-only) and reach the user at their registered email.
 
 ## Stack
 
@@ -41,6 +42,39 @@ module change plus a re-ingest.
 | `FAQ_TOP_K`, `FAQ_SIMILARITY_FLOOR` | retrieval tuning (default 4 / 0.35 cosine similarity) |
 | `FAQ_SUPPORT_EMAIL` | support address for the F28.3 escalation |
 
+## Escalation design (F28.3)
+
+Escalation is **user-decided, not bot-decided**: any signed-in user can raise a support request at
+any time — a refusal only pre-fills the form (question + matched topics), it does not gate the
+flow. The UI has two entrances:
+
+- **`/faq` page** (nav item, login-gated): browses the knowledge base (`GET /v1/faq/entries`, so
+  the list can never drift from what the bot cites), an ask panel, and an always-visible
+  "Raise a support request" section.
+- **Floating chat widget** (bottom-right on every signed-in page): same ask + raise flow in a
+  popup; a refusal pre-fills the ticket form.
+
+The earlier mailto design (prefilled `mailto:` link) was replaced by server-side tickets. An
+admin replies through the user's registered email (Admin Users page); server-side SES remains the
+documented production path for automated outbound mail.
+
+## Endpoints
+
+All require a bearer token (`requireAuth`, Keycloak) and use the shared error envelope.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /v1/faq/ask` | grounded answer with citations, or a refusal with suggestions + escalation data |
+| `GET /v1/faq/search?q=` | raw retrieval (no LLM call) |
+| `GET /v1/faq/entries` | the full knowledge base, for the FAQ page's browse list |
+| `POST /v1/faq/support-requests` | create a support ticket (userId from the token) |
+| `GET /v1/faq/support-requests` | admin-only triage list (open tickets, newest first) |
+
+## Frontend
+
+`frontend/src/pages/FaqPage.tsx` (the `/faq` route) and `frontend/src/pages/FaqChatWidget.tsx`
+share the ask/ticket state in `frontend/src/faq.ts`.
+
 ## Ingestion
 
 ```bash
@@ -57,5 +91,6 @@ docker compose up -d --build chroma faq-service   # or the whole stack
 npm run ingest -w faq-service                      # build the knowledge base
 ```
 
-API: `POST /v1/faq/ask {question}` and `GET /v1/faq/search?q=` — bearer token required
-(`requireAuth`, Keycloak). Docs of the error envelope match every other FoC service.
+API: see the endpoints table above. A refusal carries
+`{ answer: null, suggestions[], escalation: { question, matchedTopics, userId } }`. Docs of the
+error envelope match every other FoC service.
