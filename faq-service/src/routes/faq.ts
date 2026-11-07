@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { parseOrThrow, requireRole } from '@foc/shared-middleware';
 import type { AppContext } from '../context.js';
 import { ask } from '../faq.js';
-import { newTicket } from '../tickets.js';
+import { newTicket, type TicketStatus } from '../sqlTickets.js';
 
 const askSchema = z.object({ question: z.string().min(3).max(500) });
 const searchSchema = z.object({ q: z.string().min(3).max(500) });
@@ -12,6 +12,13 @@ const ticketSchema = z.object({
   matchedTopics: z.array(z.string().max(200)).max(10).default([]),
   replyTo: z.string().email().max(200).optional(),
 });
+const transitionSchema = z.object({ status: z.enum(['under_review', 'resolved']) });
+
+// State machine: open → under review → resolved, plus direct open → resolved.
+const ALLOWED_FROM: Record<'under_review' | 'resolved', TicketStatus[]> = {
+  under_review: ['open'],
+  resolved: ['open', 'under_review'],
+};
 
 export function faqRouter(ctx: AppContext): Router {
   const router = Router();
@@ -73,12 +80,23 @@ export function faqRouter(ctx: AppContext): Router {
     }
   });
 
-  // Admin triage list: open tickets with the reply-to address, newest first.
+  // Admin triage list: all statuses with their append-only transition history, newest first.
   router.get('/support-requests', requireRole('admin'), async (_req, res, next) => {
     try {
-      const tickets = await ctx.tickets.listOpen(50);
-      tickets.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      res.json({ data: tickets });
+      res.json({ data: await ctx.tickets.list(100) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Admin-only state machine. The store applies UPDATE + history append in one transaction.
+  router.patch('/support-requests/:id', requireRole('admin'), async (req, res, next) => {
+    try {
+      const { status } = parseOrThrow(transitionSchema, req.body);
+      const id = String(req.params.id);
+      const ticket = await ctx.tickets.updateStatus(id, status, ALLOWED_FROM[status], req.auth!.userId);
+      if (!ticket) return void res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such support request.' } });
+      res.json({ ticketId: ticket.ticketId, status: ticket.status, history: ticket.history });
     } catch (err) {
       next(err);
     }

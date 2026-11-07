@@ -50,18 +50,39 @@ function citedIndexes(answer: string, chunkCount: number): number[] {
 /**
  * The ask path: retrieve top-k, refuse below the similarity floor, otherwise generate a grounded
  * answer. The refusal carries everything the F28.3 escalation (support email) needs.
+ *
+ * Every ask emits one structured pino event ('faq ask') — the observability seam that
+ * CloudWatch log metric filters turn into the FOC/FaqAsks and FOC/FaqRefusals metrics.
  */
 export async function ask(
-  ctx: Pick<AppContext, 'config' | 'generate'> & { retrieve: Retrieve },
+  ctx: Pick<AppContext, 'config' | 'generate' | 'logger'> & { retrieve: Retrieve },
   question: string,
   userId: string,
 ): Promise<FaqResponse> {
   const { retrieve, config, generate } = ctx;
+  const start = Date.now();
   const chunks = await retrieve(question, config.topK);
 
   const best = chunks[0];
+  const finish = (response: FaqResponse): FaqResponse => {
+    ctx.logger.info(
+      {
+        question,
+        refused: response.answer === null,
+        top1Similarity: best ? Number(best.similarity.toFixed(4)) : null,
+        similarityFloor: config.similarityFloor,
+        durationMs: Date.now() - start,
+        retrieved: chunks.map((c) => c.doc.metadata.heading as string),
+        models: { embed: config.embedModel, gen: config.genModel },
+        userId,
+      },
+      'faq ask',
+    );
+    return response;
+  };
+
   if (!best || best.similarity < config.similarityFloor) {
-    return {
+    return finish({
       answer: null,
       suggestions: chunks.slice(0, 3).map((c) => ({
         source: c.doc.metadata.source as string,
@@ -72,19 +93,19 @@ export async function ask(
         matchedTopics: chunks.map((c) => c.doc.metadata.heading as string),
         userId,
       },
-    };
+    });
   }
 
   const answer = (await generate(buildPrompt(question, chunks))).trim();
   if (answer === 'I do not know.' || answer === 'I do not know') {
-    return {
+    return finish({
       answer: null,
       suggestions: chunks.slice(0, 3).map((c) => ({
         source: c.doc.metadata.source as string,
         heading: c.doc.metadata.heading as string,
       })),
       escalation: { question, matchedTopics: chunks.map((c) => c.doc.metadata.heading as string), userId },
-    };
+    });
   }
 
   const used = citedIndexes(answer, chunks.length);
@@ -93,9 +114,9 @@ export async function ask(
     source: chunks[index - 1].doc.metadata.source as string,
     heading: chunks[index - 1].doc.metadata.heading as string,
   }));
-  return {
+  return finish({
     answer,
     citations: cited,
     sources: [...new Set(cited.map((c) => c.source))],
-  };
+  });
 }

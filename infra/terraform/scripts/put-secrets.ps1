@@ -58,6 +58,7 @@ Set-Secret '/foc/user-service/DATABASE_URL'     { "postgres://users:$(New-Secret
 Set-Secret '/foc/supplier-service/DATABASE_URL' { "postgres://suppliers:$(New-Secret)@${rds}:5432/suppliers_db?sslmode=require" }
 Set-Secret '/foc/credit-service/DATABASE_URL'   { "postgres://credits:$(New-Secret)@${rds}:5432/credits_db?sslmode=no-verify" }
 Set-Secret '/foc/order-service/DATABASE_URL'    { "postgres://orders:$(New-Secret)@${rds}:5432/orders_db?sslmode=no-verify" }
+Set-Secret '/foc/faq-service/DATABASE_URL'      { "postgres://faq:$(New-Secret)@${rds}:5432/faq_db?sslmode=no-verify" }
 Set-Secret '/foc/keycloak/KC_DB_PASSWORD'       { New-Secret }
 
 # RabbitMQ container (Service Connect name rabbitmq:5672): user "foc", one password in two parameters.

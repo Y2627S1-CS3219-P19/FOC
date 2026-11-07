@@ -4,6 +4,7 @@ import { Document } from '@langchain/core/documents';
 import { ask, buildPrompt } from '../src/faq.js';
 import { storeRetriever } from '../src/retrieval.js';
 import { loadConfig } from '../src/config.js';
+import { createLogger } from '@foc/shared-middleware';
 import type { FaqStore } from '../src/chroma.js';
 
 /** Deterministic fake: known strings map to fixed vectors, anything unknown maps to a zero vector. */
@@ -76,9 +77,13 @@ async function setup(opts: { floor?: number; answer?: string } = {}) {
   await store.addDocuments(DOCS, ['a', 'b', 'c']);
   const retrieve = storeRetriever(store);
   const prompts: string[] = [];
-  const config = { ...loadConfig({ GEMINI_API_KEY: 'test', OPENROUTER_API_KEY: 'test' }), similarityFloor: opts.floor ?? 0.35 };
+  const config = {
+    ...loadConfig({ GEMINI_API_KEY: 'test', OPENROUTER_API_KEY: 'test', FAQ_DATABASE_URL: 'postgres://faq:test@localhost:5438/faq_db' }),
+    similarityFloor: opts.floor ?? 0.35,
+  };
   const ctx = {
     config,
+    logger: createLogger('faq-test', 'silent'),
     retrieve,
     prompts,
     generate: async (prompt: string) => {

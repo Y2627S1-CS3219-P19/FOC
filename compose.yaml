@@ -281,6 +281,20 @@ services:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3004/health/ready"]
 
   # ---------- FAQ Service (customer relations, RAG — F28) ----------
+  faq-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: faq_db
+      POSTGRES_USER: faq
+      POSTGRES_PASSWORD: ${FAQ_DB_PASSWORD}
+    ports:
+      - "5438:5432"
+    volumes:
+      - faq-db-data:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U faq -d faq_db"]
+
   # Chroma has no curl/wget in its image, so it has no healthcheck of its own; faq-service's
   # /health/ready pings Chroma and acts as the combined readiness gate.
   chroma:
@@ -300,6 +314,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CHROMA_URL: http://chroma:8000
       FAQ_COLLECTION: foc_faq
+      FAQ_DATABASE_URL: postgres://faq:${FAQ_DB_PASSWORD}@faq-db:5432/faq_db
       FAQ_SUPPORT_EMAIL: ${FAQ_SUPPORT_EMAIL:-foc-support@u.nus.edu}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       FAQ_EMBED_MODEL: ${FAQ_EMBED_MODEL:-gemini-embedding-001}
@@ -311,6 +326,8 @@ services:
       TRUST_PROXY: "1"
     # No host port: only reachable through the gateway (gateway/nginx.conf, /v1/faq).
     depends_on:
+      faq-db:
+        condition: service_healthy
       chroma:
         condition: service_started
       keycloak:
@@ -362,5 +379,6 @@ volumes:
   suppliers-db-data:
   credits-db-data:
   orders-db-data:
+  faq-db-data:
   rabbitmq-data:
   chroma-data:

@@ -124,12 +124,21 @@ cannot answer can be escalated to the team as a support request.
   and suggests the nearest topics.
 - **F28.3 support escalation** — login-gated server-side tickets
   (`POST /v1/faq/support-requests`; admin triage via `GET`). Escalation is user-decided: the
-  "Raise a support request" form is always available, and a refusal only pre-fills it.
+  "Raise a support request" form is always available, and a refusal only pre-fills it. Admins
+  move a ticket `open → under review → resolved` (`PATCH`, admin-only) and see an append-only
+  history of every transition on the "Admin: FAQ tickets" page.
 
-**Architecture.** Express 5 + `@foc/shared-middleware` (the house pattern), **no SQL database** —
-Chroma is the only store. Embeddings: `gemini-embedding-001` via the Gemini API. Generation:
-OpenRouter chat client. In the UI: a dedicated `/faq` page (browse the KB, ask, raise a ticket)
-and a floating chat widget on every signed-in page.
+**Architecture.** Express 5 + `@foc/shared-middleware` (the house pattern). Two stores: **Chroma**
+for the knowledge-base vectors, **Postgres (`faq_db`)** for the tickets — transactional records
+with an insert-only status history, so they live in SQL rather than in a vector database.
+Embeddings: `gemini-embedding-001` via the Gemini API. Generation: OpenRouter chat client. In the
+UI: a dedicated `/faq` page (browse the KB, ask, raise a ticket) and a floating chat widget on
+every signed-in page.
+
+**Observability.** Every ask writes one structured pino line (`faq ask`) with the refusal flag,
+top-1 similarity and duration. CloudWatch log metric filters turn those into the `FOC/FaqAsks`,
+`FOC/FaqRefusals` and `FOC/FaqAskDurationMs` metrics on the shared `foc` dashboard, so RAG answer
+quality sits next to the DLQ and outbox signals. Signals only, no alerting.
 
 **Why not Bedrock?** The NUS AWS organisation SCP denies `bedrock:InvokeModel` account-wide
 (verified live 5 Nov), so the model layer is provider-agnostic by design: embeddings and

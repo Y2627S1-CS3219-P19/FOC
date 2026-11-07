@@ -16,8 +16,14 @@ refusal with the nearest topics and an escalation payload (F28.3).
 
 Express 5 + `@foc/shared-middleware` (auth, error envelope, logging) — same as user/credit/order
 services. LangChain.js components (`@langchain/core` `VectorStore`, `@langchain/google-genai`
-embeddings, `@langchain/openai` chat client) over hand-written retrieval/prompt logic. No SQL
-database: Chroma is the only store.
+embeddings, `@langchain/openai` chat client) over hand-written retrieval/prompt logic.
+
+Two stores, each doing what it is good at:
+
+- **Chroma** — the vector store, for the knowledge base only (`foc_faq` collection).
+- **Postgres (`faq_db`)** — the support tickets, which are transactional records, not vectors.
+  `src/sqlTickets.ts` holds them; `migrations/` is applied at start by the shared
+  `runMigrations`. Same house pattern as user/credit/order (pg Pool, one migration dir).
 
 | Piece | Choice | Why |
 | --- | --- | --- |
@@ -41,6 +47,7 @@ module change plus a re-ingest.
 | `FAQ_EMBED_MODEL` / `FAQ_GEN_MODEL` | model ids (swap + re-ingest) |
 | `FAQ_TOP_K`, `FAQ_SIMILARITY_FLOOR` | retrieval tuning (default 4 / 0.35 cosine similarity) |
 | `FAQ_SUPPORT_EMAIL` | support address for the F28.3 escalation |
+| `FAQ_DATABASE_URL` | Postgres for the ticket tables (`faq_db`) |
 
 ## Escalation design (F28.3)
 
@@ -68,7 +75,38 @@ All require a bearer token (`requireAuth`, Keycloak) and use the shared error en
 | `GET /v1/faq/search?q=` | raw retrieval (no LLM call) |
 | `GET /v1/faq/entries` | the full knowledge base, for the FAQ page's browse list |
 | `POST /v1/faq/support-requests` | create a support ticket (userId from the token) |
-| `GET /v1/faq/support-requests` | admin-only triage list (open tickets, newest first) |
+| `GET /v1/faq/support-requests` | admin-only triage list (all statuses, newest first, with history) |
+| `PATCH /v1/faq/support-requests/:id` | admin-only status transition (`under_review` or `resolved`) |
+
+## Ticket lifecycle
+
+`open → under review → resolved`, plus the direct `open → resolved` shortcut. A resolved ticket is
+terminal. Transitions are **admin-only** and there is **no delete** — a support request is a record
+that a student had a problem.
+
+Every transition **appends** a row to `ticket_status_history` in the same transaction as the
+status update; the `tickets.status` column is a cache of the latest history row for cheap
+filtering, and the history is the source of truth. The app never updates or deletes history, so
+the trail can be replayed: `open → under review by admin-1 → resolved by admin-2`.
+
+Illegal transitions answer `409 INVALID_TRANSITION`, unknown tickets `404`.
+
+## Observability (F28 logging)
+
+Every ask emits one structured pino line, `msg: "faq ask"`, carrying `refused`,
+`top1Similarity`, `similarityFloor`, `durationMs`, the retrieved headings and the model ids.
+`infra/terraform/demo/observability.tf` turns those lines into the `FOC/FaqAsks`,
+`FOC/FaqRefusals` and `FOC/FaqAskDurationMs` CloudWatch metrics, shown on the `foc` dashboard.
+
+The **refusal rate is the RAG health signal**: if it climbs, either the corpus stopped covering
+what students ask or `FAQ_SIMILARITY_FLOOR` is mis-tuned. There is deliberately no alerting —
+signals only (user decision, 7 Nov).
+
+Rejected for now, and why: **MLflow / Langfuse / W&B** are experiment tracking (or a whole extra
+server plus its own database) for a single-service RAG; the pino line already carries everything
+those tools would ingest, so they can be added later without touching the ask path.
+**pgvector** (consolidating the KB into Postgres) is the documented post-freeze move: `FaqStore`
+and `TicketStore` are the swap seams, and the GATE would have to be re-run.
 
 ## Frontend
 

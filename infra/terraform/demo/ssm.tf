@@ -45,6 +45,7 @@ locals {
       RABBITMQ_DEFAULT_PASS = "/foc/rabbitmq/RABBITMQ_DEFAULT_PASS"
     }
     faq-service = {
+      DATABASE_URL       = "/foc/faq-service/DATABASE_URL"
       GEMINI_API_KEY     = "/foc/faq-service/GEMINI_API_KEY"
       OPENROUTER_API_KEY = "/foc/faq-service/OPENROUTER_API_KEY"
     }
@@ -58,6 +59,7 @@ locals {
     SUPPLIERS_DATABASE_URL = "/foc/supplier-service/DATABASE_URL"
     CREDITS_DATABASE_URL   = "/foc/credit-service/DATABASE_URL"
     ORDERS_DATABASE_URL    = "/foc/order-service/DATABASE_URL"
+    FAQ_DATABASE_URL       = "/foc/faq-service/DATABASE_URL"
     KC_DB_PASSWORD         = "/foc/keycloak/KC_DB_PASSWORD"
   }
 

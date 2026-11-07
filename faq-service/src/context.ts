@@ -3,7 +3,7 @@ import type { Logger } from 'pino';
 import type { FaqEntry } from './corpus.js';
 import type { Config } from './config.js';
 import type { RetrievedChunk } from './retrieval.js';
-import type { TicketStore } from './tickets.js';
+import type { TicketStore } from './sqlTickets.js';
 
 /** Everything the app and routes need, injected so tests can stub every piece. */
 export interface AppContext {

@@ -32,14 +32,27 @@ export function faqAnchor(source: string, heading: string): string {
 }
 
 /** A raised support request, as the admin triage list returns it. */
+export type TicketStatus = 'open' | 'under_review' | 'resolved';
+
+export interface TicketHistoryEntry {
+  fromStatus: string | null;
+  toStatus: string;
+  adminId: string | null;
+  createdAt: string;
+}
+
 export interface FaqTicket {
   ticketId: string;
   userId: string;
   question: string;
   matchedTopics: string[];
   replyTo?: string;
-  status: 'open';
+  status: TicketStatus;
   createdAt: string;
+  updatedAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  history: TicketHistoryEntry[];
 }
 
 /**

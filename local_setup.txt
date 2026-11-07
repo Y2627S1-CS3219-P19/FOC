@@ -8,7 +8,7 @@ most of it waiting for the first Docker build.
 ----------------
 - Docker Desktop, running. This is the only thing needed to RUN the app.
 - Node.js 22+ and npm. Only needed to run the TESTS or to edit code outside Docker.
-- These ports free: 5173, 8080, 8025, 3001, 3002, 5433, 5434, 5435, 5436, 5672, 15672
+- These ports free: 5173, 8080, 8025, 3001, 3002, 5433, 5434, 5435, 5436, 5438, 5672, 15672
 
 All commands below are run from the FOC/ folder.
 
@@ -35,6 +35,9 @@ the stack still starts - everything except the FAQ endpoints works:
 
   GEMINI_API_KEY                 from https://aistudio.google.com/apikey (free tier is fine locally)
   OPENROUTER_API_KEY             from https://openrouter.ai/keys
+
+FAQ_DB_PASSWORD can stay any random string. It is the local Postgres password for faq-db (the
+FAQ service's ticket database).
 
 .env is git-ignored. Never commit it.
 
@@ -229,6 +232,7 @@ and /v1/credits to them, and it returns 404 for /v1/internal/* so service-to-ser
 are never reachable from the browser.
 
   faq-service      RAG FAQ chatbot (F28)                      internal only (via frontend /v1/faq)
+  faq-db           Postgres for FAQ support tickets            port 5438
   chroma           vector database for the FAQ knowledge base  internal only
 
 Editing the FAQ corpus (faq-service/corpus/faq.md)? It is baked into the image, so rebuild and
@@ -238,6 +242,9 @@ re-ingest:
     npm run ingest -w faq-service
 
 Ingestion is idempotent (deterministic chunk ids), so re-running never duplicates.
+
+Support tickets live in faq-db (Postgres), not in Chroma. Migrations run automatically when
+faq-service starts. "docker compose down -v" wipes them along with everything else.
 
 More detail:
   README.md   - overview, structure, how to run

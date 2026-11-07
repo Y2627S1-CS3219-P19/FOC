@@ -22,6 +22,7 @@ COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/packages packages
 COPY --from=build /app/faq-service/package.json faq-service/package.json
 COPY --from=build /app/faq-service/dist faq-service/dist
+COPY --from=build /app/faq-service/migrations faq-service/migrations
 COPY --from=build /app/faq-service/corpus faq-service/corpus
 USER node
 EXPOSE 3005
