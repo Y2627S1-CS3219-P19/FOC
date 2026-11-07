@@ -31,6 +31,17 @@ export function faqAnchor(source: string, heading: string): string {
   return `faq-${slug(source.replace(/\.md$/, ''))}-${slug(heading)}`;
 }
 
+/** A raised support request, as the admin triage list returns it. */
+export interface FaqTicket {
+  ticketId: string;
+  userId: string;
+  question: string;
+  matchedTopics: string[];
+  replyTo?: string;
+  status: 'open';
+  createdAt: string;
+}
+
 /**
  * Shared ask + raise-ticket state for the FAQ page and the chat popup.
  * Escalation is user-decided: a ticket can be raised at any time, not only after a refusal.

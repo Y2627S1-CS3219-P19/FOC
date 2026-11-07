@@ -6,6 +6,7 @@ import { useWallet } from './errands';
 import { AdminRoleChangesPage } from './pages/AdminRoleChanges';
 import { AdminAuditPage } from './pages/AdminAudit';
 import { AdminCreditsPage } from './pages/AdminCredits';
+import { AdminFaqTicketsPage } from './pages/AdminFaqTickets';
 import { AdminOrdersPage } from './pages/AdminOrders';
 import { AdminUsersPage } from './pages/AdminUsers';
 import { BoardPage } from './pages/Board';
@@ -129,6 +130,9 @@ export function App() {
               <NavLink to="/admin/audit" onClick={close}>
                 Admin: audit log
               </NavLink>
+              <NavLink to="/admin/faq-tickets" onClick={close}>
+                Admin: FAQ tickets
+              </NavLink>
             </>
           )}
           {user && <CreditPill />}
@@ -167,6 +171,7 @@ export function App() {
           <Route path="/admin/credits" element={<RequireAdmin><AdminCreditsPage /></RequireAdmin>} />
           <Route path="/admin/orders" element={<RequireAdmin><AdminOrdersPage /></RequireAdmin>} />
           <Route path="/admin/audit" element={<RequireAdmin><AdminAuditPage /></RequireAdmin>} />
+          <Route path="/admin/faq-tickets" element={<RequireAdmin><AdminFaqTicketsPage /></RequireAdmin>} />
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </main>
