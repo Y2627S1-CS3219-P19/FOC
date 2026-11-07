@@ -115,18 +115,23 @@ share the ask/ticket state in `frontend/src/faq.ts`.
 
 ## Ingestion
 
-```bash
-npm run ingest -w faq-service   # chunks corpus/*.md by ## heading, upserts into Chroma
-```
+The service ingests the corpus on every boot (after migrations, like supplier-service's seed):
+chunks `corpus/*.md` by `## heading`, then upserts into Chroma. Chunk ids are
+`source#heading-slug`, so re-running updates in place — editing the corpus and restarting the
+container is all it takes to refresh the knowledge base.
 
-Idempotent: chunk ids are `source#heading-slug`, so re-running updates in place. Re-run after any
-corpus or embedding-model change (a model change re-embeds everything).
+Ingestion failure is non-fatal on purpose: locally the stack still starts without the model keys,
+and the service logs a warning and refuses asks until ingestion succeeds. Check boot logs for
+`Corpus ingested` (or the warning).
+
+`npm run ingest -w faq-service` remains for one-offs (a single file, or a remote Chroma). It runs
+outside Docker, so it needs the FAQ env vars and a reachable Chroma URL — the boot path is the
+normal way.
 
 ## Run
 
 ```bash
-docker compose up -d --build chroma faq-service   # or the whole stack
-npm run ingest -w faq-service                      # build the knowledge base
+docker compose up -d --build chroma faq-service   # or the whole stack — KB builds itself on boot
 ```
 
 API: see the endpoints table above. A refusal carries

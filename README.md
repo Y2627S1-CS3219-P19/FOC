@@ -118,7 +118,7 @@ cannot answer can be escalated to the team as a support request.
 **F28 mapping.**
 
 - **F28.1 knowledge base** — `faq-service/corpus/faq.md` (28 hand-reviewed Q/A chunks) ingested
-  into a Chroma vector database.
+  into a Chroma vector database (automatically on faq-service startup; idempotent upsert).
 - **F28.2 conversational assistance** — `POST /v1/faq/ask`: cosine top-k retrieval, strict
   "answer only from these passages, cite them" prompt. Below the similarity floor the bot refuses
   and suggests the nearest topics.

@@ -9,6 +9,7 @@ import { loadCorpusEntries } from './corpus.js';
 import { createPool } from './db.js';
 import type { AppContext } from './context.js';
 import { createChatModel, createEmbeddings } from './modelClient.js';
+import { ingestCorpus } from './ingest.js';
 import { storeRetriever } from './retrieval.js';
 import { SqlTicketStore } from './sqlTickets.js';
 
@@ -23,6 +24,15 @@ export async function buildContext(config = loadConfig()): Promise<AppContext> {
   const chat = createChatModel(config);
   const pool = createPool(config.databaseUrl);
   await runMigrations(pool, fileURLToPath(new URL('../migrations', import.meta.url)), logger);
+  // Ingest on every boot, like supplier-service seeds its database: deterministic chunk ids make
+  // the upsert a no-op when nothing changed. Non-fatal so the stack still starts without model
+  // keys locally; the ask path reports refusals until ingestion succeeds.
+  try {
+    const chunks = await ingestCorpus(store, join(import.meta.dirname, '..', 'corpus'));
+    logger.info({ chunks, collection: config.collection }, 'Corpus ingested');
+  } catch (err) {
+    logger.warn({ err }, 'Corpus ingestion failed — FAQ answers stay unavailable until it succeeds');
+  }
   const generate = async (prompt: string): Promise<string> => {
     const res = await chat.invoke(prompt);
     return typeof res.content === 'string' ? res.content : JSON.stringify(res.content);

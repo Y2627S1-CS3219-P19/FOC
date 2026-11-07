@@ -235,13 +235,14 @@ are never reachable from the browser.
   faq-db           Postgres for FAQ support tickets            port 5438
   chroma           vector database for the FAQ knowledge base  internal only
 
-Editing the FAQ corpus (faq-service/corpus/faq.md)? It is baked into the image, so rebuild and
-re-ingest:
+Editing the FAQ corpus (faq-service/corpus/faq.md)? It is baked into the image, so just rebuild —
+the service re-ingests on startup:
 
     docker compose up -d --build faq-service
-    npm run ingest -w faq-service
 
-Ingestion is idempotent (deterministic chunk ids), so re-running never duplicates.
+Ingestion is idempotent (deterministic chunk ids), so every boot upserts in place and never
+duplicates. Check the faq-service logs for "Corpus ingested". It needs the model keys
+(GEMINI_API_KEY) — without them the service starts but logs a warning and can't answer.
 
 Support tickets live in faq-db (Postgres), not in Chroma. Migrations run automatically when
 faq-service starts. "docker compose down -v" wipes them along with everything else.
