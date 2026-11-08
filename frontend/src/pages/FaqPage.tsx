@@ -154,7 +154,6 @@ export function FaqPage() {
       )}
 
       <div className="card stack">
-        <span className="eyebrow">Browse the knowledge base</span>
         {entriesError ? <FaqUnavailable email={claims?.email} /> : null}
         {!entries && !entriesError && <p className="small muted">Loading…</p>}
         {entries?.length === 0 && <p className="small muted">The knowledge base is empty.</p>}
