@@ -12,7 +12,7 @@ const ticketSchema = z.object({
   matchedTopics: z.array(z.string().max(200)).max(10).default([]),
   replyTo: z.string().email().max(200).optional(),
 });
-const transitionSchema = z.object({ status: z.enum(['under_review', 'resolved']) });
+const transitionSchema = z.object({ status: z.enum(['under_review', 'resolved', 'wont_fix']) });
 
 /** One user-facing message for any unavailability. The reason stays in logs and /health/ready. */
 const FAQ_UNAVAILABLE_MESSAGE = 'The FAQ service is currently unavailable. Please try again later.';
@@ -27,10 +27,12 @@ function unavailable(res: { set: (k: string, v: string) => unknown }) {
 /** Serving = the KB has chunks. A service that refuses every question is not available. */
 const isServing = (ctx: AppContext) => ctx.kb.ready && ctx.kb.chunks > 0;
 
-// State machine: open → under review → resolved, plus direct open → resolved.
-const ALLOWED_FROM: Record<'under_review' | 'resolved', TicketStatus[]> = {
+// State machine: open → under review → resolved, plus direct open → resolved, plus wont_fix as a
+// second terminal state from open or under review.
+const ALLOWED_FROM: Record<'under_review' | 'resolved' | 'wont_fix', TicketStatus[]> = {
   under_review: ['open'],
   resolved: ['open', 'under_review'],
+  wont_fix: ['open', 'under_review'],
 };
 
 export function faqRouter(ctx: AppContext): Router {

@@ -57,6 +57,25 @@ describe.skipIf(!TEST_DB_URL)('SqlTicketStore (faq_db)', () => {
     expect(listed.history[1]).toMatchObject({ fromStatus: 'open', adminId: 'admin-1' });
   });
 
+  it('closes wont_fix from open or under review, attributing the closing admin', async () => {
+    const fromOpen = newTicket({ question: 'Not going to fix this one', matchedTopics: [] });
+    await store.add(fromOpen);
+    const closed = await store.updateStatus(fromOpen.ticketId, 'wont_fix', ['open', 'under_review'], 'admin-1');
+    expect(closed?.status).toBe('wont_fix');
+    expect(closed?.resolvedBy).toBe('admin-1');
+    expect(closed?.resolvedAt).toBeTruthy();
+
+    const fromReview = newTicket({ question: 'Reviewed and declined', matchedTopics: [] });
+    await store.add(fromReview);
+    await store.updateStatus(fromReview.ticketId, 'under_review', ['open', 'under_review'], 'admin-1');
+    const closedLater = await store.updateStatus(fromReview.ticketId, 'wont_fix', ['open', 'under_review'], 'admin-2');
+    expect(closedLater?.resolvedBy).toBe('admin-2');
+
+    const listed = (await store.list(50)).filter((x) => x.ticketId === fromReview.ticketId)[0];
+    expect(listed.history.map((h) => h.toStatus)).toEqual(['open', 'under_review', 'wont_fix']);
+    expect(listed.history[2]).toMatchObject({ fromStatus: 'under_review', adminId: 'admin-2' });
+  });
+
   it('returns null for an unknown ticket and rejects a transition from a terminal state', async () => {
     expect(await store.updateStatus('t-nope', 'resolved', ['open', 'under_review'], 'admin-1')).toBeNull();
 
@@ -64,6 +83,11 @@ describe.skipIf(!TEST_DB_URL)('SqlTicketStore (faq_db)', () => {
     await store.add(t);
     await store.updateStatus(t.ticketId, 'resolved', ['open', 'under_review'], 'admin-1');
     await expect(store.updateStatus(t.ticketId, 'under_review', ['open', 'under_review'], 'admin-1')).rejects.toThrow();
+
+    const wontFix = newTicket({ question: 'Closed as wont fix', matchedTopics: [] });
+    await store.add(wontFix);
+    await store.updateStatus(wontFix.ticketId, 'wont_fix', ['open', 'under_review'], 'admin-1');
+    await expect(store.updateStatus(wontFix.ticketId, 'resolved', ['open', 'under_review'], 'admin-1')).rejects.toThrow();
   });
 
   it('pings a live database', async () => {

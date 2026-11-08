@@ -54,6 +54,11 @@ function memoryTicketStore(fails = false) {
       }
       row.internalHistory.push({ fromStatus: row.status, toStatus, adminId, createdAt: new Date().toISOString() });
       row.status = toStatus;
+      // Terminal closures (resolved, wont_fix) are attributed, like SqlTicketStore.updateStatus.
+      if (toStatus === 'resolved' || toStatus === 'wont_fix') {
+        row.resolvedBy = adminId;
+        row.resolvedAt = new Date().toISOString();
+      }
       return { ...row, history: [...row.internalHistory] };
     },
     ping: async () => {},
@@ -298,6 +303,51 @@ describe('FAQ routes', () => {
       const res = await request(app).patch(`/v1/faq/support-requests/${id}`).set('Authorization', 'Bearer admin-1').send({ status: 'resolved' });
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('resolved');
+    });
+
+    it('closes open → wont_fix and stamps the closure', async () => {
+      const app = build();
+      const id = await raise(app);
+      const res = await request(app)
+        .patch(`/v1/faq/support-requests/${id}`)
+        .set('Authorization', 'Bearer admin-1')
+        .send({ status: 'wont_fix' });
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('wont_fix');
+      const list = await request(app).get('/v1/faq/support-requests').set('Authorization', 'Bearer admin-1');
+      const ticket = list.body.data.find((t: SupportTicket) => t.ticketId === id);
+      expect(ticket.resolvedBy).toBe('admin-1');
+      expect(ticket.resolvedAt).toBeTruthy();
+    });
+
+    it('closes under_review → wont_fix with the closing admin attributed', async () => {
+      const app = build();
+      const id = await raise(app);
+      await request(app).patch(`/v1/faq/support-requests/${id}`).set('Authorization', 'Bearer admin-1').send({ status: 'under_review' });
+      const res = await request(app)
+        .patch(`/v1/faq/support-requests/${id}`)
+        .set('Authorization', 'Bearer admin-2')
+        .send({ status: 'wont_fix' });
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('wont_fix');
+      const list = await request(app).get('/v1/faq/support-requests').set('Authorization', 'Bearer admin-2');
+      const ticket = list.body.data.find((t: SupportTicket) => t.ticketId === id);
+      expect(ticket.resolvedBy).toBe('admin-2');
+      expect(ticket.history.map((h: { toStatus: TicketStatus }) => h.toStatus)).toEqual(['open', 'under_review', 'wont_fix']);
+    });
+
+    it('treats wont_fix as terminal: 409 afterwards, history untouched', async () => {
+      const app = build();
+      const id = await raise(app);
+      await request(app).patch(`/v1/faq/support-requests/${id}`).set('Authorization', 'Bearer admin-1').send({ status: 'wont_fix' });
+      const res = await request(app)
+        .patch(`/v1/faq/support-requests/${id}`)
+        .set('Authorization', 'Bearer admin-1')
+        .send({ status: 'under_review' });
+      expect(res.status).toBe(409);
+      const list = await request(app).get('/v1/faq/support-requests').set('Authorization', 'Bearer admin-1');
+      const ticket = list.body.data.find((t: SupportTicket) => t.ticketId === id);
+      expect(ticket.history).toHaveLength(2);
     });
 
     it('rejects an illegal transition with 409 and does not touch the history', async () => {

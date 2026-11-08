@@ -77,12 +77,15 @@ All require a bearer token (`requireAuth`, Keycloak) and use the shared error en
 | `GET /v1/faq/entries` | the full knowledge base, for the FAQ page's browse list |
 | `POST /v1/faq/support-requests` | create a support ticket (login required; no user id stored) |
 | `GET /v1/faq/support-requests` | admin-only triage list (all statuses, newest first, with history) |
-| `PATCH /v1/faq/support-requests/:id` | admin-only status transition (`under_review` or `resolved`) |
+| `PATCH /v1/faq/support-requests/:id` | admin-only status transition (`under_review`, `resolved`, or `wont_fix`) |
 
 ## Ticket lifecycle
 
-`open → under review → resolved`, plus the direct `open → resolved` shortcut. A resolved ticket is
-terminal. Transitions are **admin-only** and there is **no delete** — a support request is a record
+`open → under review → resolved`, plus the direct `open → resolved` shortcut, plus `wont_fix` — a
+second terminal state an admin uses to close a ticket they will not act on (`open → wont_fix` and
+`under_review → wont_fix`). `resolved` and `wont_fix` are both terminal; both stamp who closed the
+ticket and when (`resolved_by` / `resolved_at`). Transitions are **admin-only** and there is
+**no delete** — a support request is a record
 that a student had a problem.
 
 Every transition **appends** a row to `ticket_status_history` in the same transaction as the

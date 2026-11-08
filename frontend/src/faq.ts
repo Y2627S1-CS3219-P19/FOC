@@ -42,7 +42,7 @@ export function faqAnchor(source: string, heading: string): string {
 }
 
 /** A raised support request, as the admin triage list returns it. */
-export type TicketStatus = 'open' | 'under_review' | 'resolved';
+export type TicketStatus = 'open' | 'under_review' | 'resolved' | 'wont_fix';
 
 export interface TicketHistoryEntry {
   fromStatus: string | null;

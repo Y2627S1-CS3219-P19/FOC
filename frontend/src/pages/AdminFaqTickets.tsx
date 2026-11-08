@@ -8,15 +8,20 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
   open: 'open',
   under_review: 'under review',
   resolved: 'resolved',
+  wont_fix: "won't fix",
 };
 
-/** What the state machine allows from each status; a resolved ticket is terminal. */
+/** What the state machine allows from each status; a resolved or wont_fix ticket is terminal. */
 const NEXT_STATUS: Partial<Record<TicketStatus, { status: TicketStatus; label: string }[]>> = {
   open: [
     { status: 'under_review', label: 'Start review' },
     { status: 'resolved', label: 'Resolve' },
+    { status: 'wont_fix', label: "Won't fix" },
   ],
-  under_review: [{ status: 'resolved', label: 'Resolve' }],
+  under_review: [
+    { status: 'resolved', label: 'Resolve' },
+    { status: 'wont_fix', label: "Won't fix" },
+  ],
 };
 
 /** Admin triage for FAQ support requests (F28.3): filter by status, transition, inspect history. */
@@ -63,6 +68,7 @@ export function AdminFaqTicketsPage() {
           <option value="open">open</option>
           <option value="under_review">under review</option>
           <option value="resolved">resolved</option>
+          <option value="wont_fix">won't fix</option>
         </select>
       </div>
       <ErrorBox error={error} />
@@ -87,7 +93,7 @@ export function AdminFaqTicketsPage() {
                 <td data-label="Ticket" title={t.ticketId}>
                   {shortId(t.ticketId)} <span className="muted">({STATUS_LABEL[t.status]})</span>
                   {t.resolvedAt && (
-                    <div className="small muted">resolved by {shortId(t.resolvedBy ?? '')}</div>
+                    <div className="small muted">closed by {shortId(t.resolvedBy ?? '')}</div>
                   )}
                 </td>
                 <td data-label="Question">{t.question}</td>
@@ -100,7 +106,7 @@ export function AdminFaqTicketsPage() {
                         {n.label}
                       </button>
                     ))}
-                    {t.status === 'resolved' && <span className="small muted">done</span>}
+                    {(t.status === 'resolved' || t.status === 'wont_fix') && <span className="small muted">done</span>}
                     <details>
                       <summary className="small">history ({t.history.length})</summary>
                       {t.history.map((h, i) => (

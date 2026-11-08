@@ -3,7 +3,7 @@ import { conflict } from '@foc/shared-middleware';
 import type { Logger } from 'pino';
 import type { Pool } from './db.js';
 
-export type TicketStatus = 'open' | 'under_review' | 'resolved';
+export type TicketStatus = 'open' | 'under_review' | 'resolved' | 'wont_fix';
 
 export interface TicketStatusHistoryEntry {
   fromStatus: string | null;
@@ -140,12 +140,12 @@ export class SqlTicketStore implements TicketStore {
         await client.query('ROLLBACK');
         throw conflict('INVALID_TRANSITION', `A ticket cannot move from ${fromStatus} to ${toStatus}.`);
       }
-      const resolving = toStatus === 'resolved';
+      const closing = toStatus === 'resolved' || toStatus === 'wont_fix';
       await client.query(
         `UPDATE tickets SET status = $2, updated_at = now()
-           ${resolving ? ', resolved_by = $3, resolved_at = now()' : ''}
+           ${closing ? ', resolved_by = $3, resolved_at = now()' : ''}
          WHERE ticket_id = $1`,
-        resolving ? [ticketId, toStatus, adminId] : [ticketId, toStatus],
+        closing ? [ticketId, toStatus, adminId] : [ticketId, toStatus],
       );
       await client.query('INSERT INTO ticket_status_history (ticket_id, from_status, to_status, admin_id) VALUES ($1, $2, $3, $4)', [
         ticketId,
