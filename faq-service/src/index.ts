@@ -7,9 +7,9 @@ import { createVectorStore } from './chroma.js';
 import { loadConfig } from './config.js';
 import { loadCorpusEntries } from './corpus.js';
 import { createPool } from './db.js';
-import type { AppContext } from './context.js';
+import type { AppContext, KbStatus } from './context.js';
 import { createChatModel, createEmbeddings } from './modelClient.js';
-import { ingestCorpus } from './ingest.js';
+import { ingestWithRetry } from './ingest.js';
 import { storeRetriever } from './retrieval.js';
 import { SqlTicketStore } from './sqlTickets.js';
 
@@ -24,14 +24,20 @@ export async function buildContext(config = loadConfig()): Promise<AppContext> {
   const chat = createChatModel(config);
   const pool = createPool(config.databaseUrl);
   await runMigrations(pool, fileURLToPath(new URL('../migrations', import.meta.url)), logger);
-  // Ingest on every boot, like supplier-service seeds its database: deterministic chunk ids make
-  // the upsert a no-op when nothing changed. Non-fatal so the stack still starts without model
-  // keys locally; the ask path reports refusals until ingestion succeeds.
+  const kb: KbStatus = { ready: false, chunks: 0 };
+  // Ingest on every boot, like supplier-service seeds its database (deterministic chunk ids make
+  // the upsert a no-op when nothing changed). Fatal on failure, matching every other service: a
+  // restart cannot fix a bad key or a bad corpus, so the deploy must roll back rather than serve
+  // a FAQ that refuses every question.
   try {
-    const chunks = await ingestCorpus(store, join(import.meta.dirname, '..', 'corpus'));
+    const chunks = await ingestWithRetry(store, join(import.meta.dirname, '..', 'corpus'), { logger });
+    kb.ready = true;
+    kb.chunks = chunks;
     logger.info({ chunks, collection: config.collection }, 'Corpus ingested');
   } catch (err) {
-    logger.warn({ err }, 'Corpus ingestion failed — FAQ answers stay unavailable until it succeeds');
+    kb.reason = 'INGEST_FAILED';
+    logger.error({ err }, 'Corpus ingestion failed after retries — refusing to start');
+    throw err;
   }
   const generate = async (prompt: string): Promise<string> => {
     const res = await chat.invoke(prompt);
@@ -43,7 +49,8 @@ export async function buildContext(config = loadConfig()): Promise<AppContext> {
     auth,
     retrieve: storeRetriever(store),
     generate,
-    pingStore: () => store.ping(),
+    countStore: () => store.count(),
+    kb,
     tickets: new SqlTicketStore(pool, logger),
     listEntries: async () => loadCorpusEntries(join(import.meta.dirname, '..', 'corpus')),
   };

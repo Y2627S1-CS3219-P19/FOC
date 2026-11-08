@@ -118,16 +118,47 @@ share the ask/ticket state in `frontend/src/faq.ts`.
 
 The service ingests the corpus on every boot (after migrations, like supplier-service's seed):
 chunks `corpus/*.md` by `## heading`, then upserts into Chroma. Chunk ids are
-`source#heading-slug`, so re-running updates in place — editing the corpus and restarting the
-container is all it takes to refresh the knowledge base.
+`source#heading-slug`, so re-running updates in place. It first compares its chunk count with the
+collection's (`FaqStore.count()`), so an unchanged corpus is skipped — a restart loop therefore
+does not re-embed 28 chunks every time. Check boot logs for `Corpus ingested` or
+`Corpus already ingested, skipping`.
 
-Ingestion failure is non-fatal on purpose: locally the stack still starts without the model keys,
-and the service logs a warning and refuses asks until ingestion succeeds. Check boot logs for
-`Corpus ingested` (or the warning).
+Ingestion is retried 3 times, 5s apart (the store may still be starting). After that it is
+**fatal**: the process exits 1, so Compose restarts it and an ECS deploy rolls back. Serving a FAQ
+that refuses every question is worse than not serving at all.
 
 `npm run ingest -w faq-service` remains for one-offs (a single file, or a remote Chroma). It runs
 outside Docker, so it needs the FAQ env vars and a reachable Chroma URL — the boot path is the
 normal way.
+
+## Availability contract
+
+Two separate questions, two separate answers. Do not conflate them:
+
+- **readiness** (`/health/ready` status) — "should the orchestrator replace this task?"
+- **capability** (`faq` field on the same probe) — "can the feature actually serve?"
+
+| Condition | Behaviour | Reason |
+|---|---|---|
+| Model keys absent/invalid | exit 1 | Misconfiguration never self-heals; the deploy must roll back. |
+| `FAQ_DATABASE_URL` missing, migrations fail | exit 1 | Same class; matches the other services. |
+| Chroma unreachable at boot | 3 retries, then exit 1 | Start race; ingest is idempotent so retrying is safe. |
+| Ingest fails after retries | exit 1 | Bad key/quota/corpus — a restart cannot fix it. |
+| Chroma unreachable after boot | 503, `STORE_DOWN` | Cannot exit mid-flight; the probe recovers by itself when the store returns. |
+| Store up, KB empty | 503, `KB_EMPTY` | The KB is the feature; an empty one refuses every question. |
+| Ticket DB down after boot | 200, ticket POST → 500 `SUPPORT_UNAVAILABLE` | Ask still works; cycling the task would not fix Postgres. |
+
+The probe uses a live chunk count (not the boot flag) with its own 2s timeout, under the 5s
+healthcheck timeout, so a hung store fails fast rather than looking like a broken service.
+
+`POST /v1/faq/ask` returns **503 `FAQ_UNAVAILABLE`** with `Retry-After`; `GET /v1/faq/entries` keeps
+working (it reads the corpus from the image), so the browse list survives an ask outage. Users see
+one message — "The FAQ service is currently unavailable" — and never an internal reason.
+
+Healing is automatic: Chroma has its own healthcheck (ECS replaces that task, data persists on
+EFS); faq-service's probe drains it from the ALB and flips back when the store returns; task
+replacement is the backstop. There is still no alerting (standing non-goal) — the traces are a
+`FOC/FaqRefusals` spike and the logs.
 
 ## Run
 

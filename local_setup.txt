@@ -30,8 +30,10 @@ Two values you must actually think about:
                                  (e.g. ChangeMe123) - you must change it at first login
   BOOTSTRAP_ADMIN_2_*            the same for the second admin (a different email)
 
-Two more values come from real providers, needed by the FAQ chatbot (faq-service). Without them
-the stack still starts - everything except the FAQ endpoints works:
+Two more values come from real providers and are REQUIRED by the FAQ chatbot (faq-service). The
+service now fails its startup without them (same rule as the other services: exit 1, so a bad
+deploy rolls back instead of serving a FAQ that cannot answer). The gateway waits for faq-service
+to be healthy, so the stack will not come up until these are set - free tiers are fine:
 
   GEMINI_API_KEY                 from https://aistudio.google.com/apikey (free tier is fine locally)
   OPENROUTER_API_KEY             from https://openrouter.ai/keys
@@ -173,6 +175,13 @@ happened?
 A service stays "unhealthy"
   docker compose logs <service-name>
   Almost always a missing or malformed value in .env.
+
+faq-service keeps restarting, or the gateway never starts
+  faq-service requires GEMINI_API_KEY and OPENROUTER_API_KEY. With a missing or invalid key it
+  retries ingestion 3 times, logs "Corpus ingestion failed after retries" and exits 1. The gateway
+  depends on faq-service being healthy, so nothing else starts either. Set both keys in .env, then:
+      docker compose up -d --build faq-service gateway
+  "Corpus already ingested, skipping" in the logs is normal - the knowledge base is already built.
 
 Never got the verification email
   It is in Mailpit at http://localhost:8025, not in your real inbox.

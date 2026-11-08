@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth';
+import { FaqUnavailable } from '../components';
 import { faqAnchor, useFaq } from '../faq';
 
 /**
@@ -15,7 +16,8 @@ export function FaqChatWidget() {
 
   const res = faq.res;
   const refused = res?.answer === null;
-  const showRaise = raiseOpen || refused;
+  // The form opens only when the user clicks; a refusal just offers it (see faq.raiseHint).
+  const showRaise = raiseOpen;
 
   const toggle = () => {
     setOpen(!open);
@@ -32,7 +34,8 @@ export function FaqChatWidget() {
       {open && (
         <div className="faq-popup card stack" role="dialog" aria-label="Ask about FoC">
           <span className="eyebrow">Ask about FoC</span>
-          <div className="row">
+          {faq.unavailable && <FaqUnavailable />}
+          <div className="row" hidden={faq.unavailable}>
             <input
               placeholder="e.g. how do credits move?"
               value={faq.question}
@@ -62,20 +65,54 @@ export function FaqChatWidget() {
               </p>
             </div>
           )}
-          {refused && (
-            <p className="small muted">
-              I'm not sure about that one. Closest topics:{' '}
-              {res.suggestions.map((s) => s.heading).join(' · ') || 'none found'}.
-            </p>
+          {refused && faq.lastAnswer && (
+            <div className="stack">
+              <p className="small muted">Your earlier question: “{faq.lastAnswer.question}”</p>
+              <p className="small">{faq.lastAnswer.response.answer}</p>
+              {faq.lastAnswer.response.citations.map((c) => (
+                <Link
+                  key={c.index}
+                  to={`/faq#${faqAnchor(c.source, c.heading)}`}
+                  className="small"
+                  onClick={close}
+                >
+                  – {c.heading}
+                </Link>
+              ))}
+            </div>
           )}
-          {showRaise &&
-            (faq.ticket ? (
-              <p className="small">
-                Support request created ({faq.ticket.ticketId}). An admin will reach out to {faq.replyTo || 'your account email'}.
+          {refused && (
+            <div className="stack">
+              <p className="small muted">
+                I'm not sure about that one. Closest topics: {res.suggestions.length === 0 && 'none found'}
               </p>
-            ) : (
+              {res.suggestions.map((s) => (
+                <Link
+                  key={s.heading}
+                  to={`/faq#${faqAnchor(s.source, s.heading)}`}
+                  className="small"
+                  onClick={close}
+                >
+                  – {s.heading}
+                </Link>
+              ))}
+            </div>
+          )}
+          {faq.ticket ? (
+            <p className="small">
+              Support request created ({faq.ticket.ticketId}). An admin will reach out to {faq.replyTo || 'your account email'}.
+            </p>
+          ) : showRaise ? (
+            (
               <div className="stack">
-                <p className="small">Still stuck? Raise a support request and we'll reach back.</p>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <p className="small" style={{ margin: 0 }}>
+                    Raise a support request and we'll reach back.
+                  </p>
+                  <button className="ghost small" onClick={() => setRaiseOpen(false)}>
+                    Close
+                  </button>
+                </div>
                 {raiseOpen && (
                   <label>
                     Your question
@@ -87,6 +124,7 @@ export function FaqChatWidget() {
                     />
                   </label>
                 )}
+                {faq.ticketError && <p className="small">{faq.ticketError}</p>}
                 <label className="small">
                   Reply-to email
                   <input
@@ -104,8 +142,9 @@ export function FaqChatWidget() {
                   {faq.busy ? 'Sending…' : 'Raise a support request'}
                 </button>
               </div>
-            ))}
-          {!raiseOpen && !refused && (
+            )
+          ) : null}
+          {!raiseOpen && !faq.ticket && (
             <button className="ghost small" onClick={() => setRaiseOpen(true)}>
               Raise a support request
             </button>

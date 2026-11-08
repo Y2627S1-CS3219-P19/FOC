@@ -34,10 +34,11 @@ const stubAuth = {
 };
 
 /** In-memory TicketStore that honours the append-only history contract. */
-function memoryTicketStore() {
+function memoryTicketStore(fails = false) {
   const rows = new Map<string, SupportTicket & { internalHistory: SupportTicket['history'] }>();
   const store: TicketStore = {
     add: async (t) => {
+      if (fails) throw new Error('postgres down');
       rows.set(t.ticketId, { ...t, internalHistory: [{ fromStatus: null, toStatus: 'open', adminId: null, createdAt: t.createdAt }] });
     },
     list: async (limit) =>
@@ -60,9 +61,17 @@ function memoryTicketStore() {
   return { store, rows };
 }
 
-function buildApp(opts: { pingOk?: boolean; floor?: number } = {}) {
+function buildApp(
+  opts: {
+    storeChunks?: number | 'error';
+    floor?: number;
+    ticketFails?: boolean;
+    retrieveFails?: boolean;
+    kb?: { ready: boolean; chunks: number; reason?: 'INGEST_FAILED' };
+  } = {},
+) {
   const ticketRows: Parameters<typeof Object>[0][] = [];
-  const tickets = memoryTicketStore();
+  const tickets = memoryTicketStore(opts.ticketFails);
   const events: { fields: Record<string, unknown>; msg: string }[] = [];
   // Real pino (pino-http needs one) at silent level, with the info method overridden so tests
   // can assert the observability events.
@@ -78,15 +87,19 @@ function buildApp(opts: { pingOk?: boolean; floor?: number } = {}) {
     config: opts.floor === undefined ? config : { ...config, similarityFloor: opts.floor },
     logger,
     auth: stubAuth,
-    retrieve: async (q, k) =>
-      Array.from({ length: Math.min(k, 2) }, (_, i) => ({
+    retrieve: async (q, k) => {
+      if (opts.retrieveFails) throw new Error('chroma timeout');
+      return Array.from({ length: Math.min(k, 2) }, (_, i) => ({
         doc: { pageContent: `chunk ${i}`, metadata: { source: 'faq.md', heading: `h${i}` } },
         similarity: 0.9 - i * 0.1,
-      })),
-    generate: async () => 'Answer [1]',
-    pingStore: async () => {
-      if (!opts.pingOk) throw new Error('chroma down');
+      }));
     },
+    generate: async () => 'Answer [1]',
+    countStore: async () => {
+      if (opts.storeChunks === 'error') throw new Error('chroma down');
+      return opts.storeChunks ?? 2;
+    },
+    kb: opts.kb ?? { ready: true, chunks: opts.storeChunks === 'error' || opts.storeChunks === undefined ? 2 : opts.storeChunks },
     tickets: tickets.store,
     listEntries: async () => [
       { source: 'faq.md', heading: 'What are credits?', content: 'Credits are the platform payment.' },
@@ -95,7 +108,7 @@ function buildApp(opts: { pingOk?: boolean; floor?: number } = {}) {
   return { app: createApp(ctx), events };
 }
 
-const build = (opts?: { pingOk?: boolean }) => buildApp(opts).app;
+const build = (opts?: Parameters<typeof buildApp>[0]) => buildApp(opts).app;
 
 describe('FAQ routes', () => {
   it('rejects an unauthenticated ask with the standard 401 envelope', async () => {
@@ -159,10 +172,18 @@ describe('FAQ routes', () => {
     expect(refusalEvt!.fields).toMatchObject({ refused: true, top1Similarity: 0.9 });
   });
 
-  it('reports readiness from the store probe', async () => {
-    expect((await request(build({ pingOk: true })).get('/health/ready')).status).toBe(200);
-    const down = await request(build({ pingOk: false })).get('/health/ready');
+  it('reports readiness and capability together', async () => {
+    const ok = await request(build()).get('/health/ready');
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ status: 'ok', faq: 'available', chunks: 2 });
+
+    const down = await request(build({ storeChunks: 'error' })).get('/health/ready');
     expect(down.status).toBe(503);
+    expect(down.body).toMatchObject({ status: 'unavailable', faq: 'unavailable', reason: 'STORE_DOWN' });
+
+    const empty = await request(build({ storeChunks: 0 })).get('/health/ready');
+    expect(empty.status).toBe(503);
+    expect(empty.body).toMatchObject({ status: 'unavailable', reason: 'KB_EMPTY' });
   });
 
   it('creates a support ticket without storing the requester identity (F28.3)', async () => {
@@ -205,6 +226,37 @@ describe('FAQ routes', () => {
     // The implicit creation row is already in the history.
     expect(admin.body.data[0].history).toHaveLength(1);
     expect(admin.body.data[0].history[0]).toMatchObject({ fromStatus: null, toStatus: 'open' });
+  });
+
+  it('answers 503 FAQ_UNAVAILABLE (not a refusal) when the knowledge base cannot serve', async () => {
+    const app = build({ kb: { ready: false, chunks: 0, reason: 'INGEST_FAILED' } });
+    const res = await request(app).post('/v1/faq/ask').set('Authorization', 'Bearer user-1').send({ question: 'What are credits?' });
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatchObject({ code: 'FAQ_UNAVAILABLE' });
+    expect(res.headers['retry-after']).toBe('30');
+    // The message is the single user-facing one; the internal reason never leaks.
+    expect(res.body.error.message).not.toContain('INGEST_FAILED');
+  });
+
+  it('treats a retrieval failure as unavailability, not a server error', async () => {
+    const res = await request(build({ retrieveFails: true }))
+      .post('/v1/faq/ask')
+      .set('Authorization', 'Bearer user-1')
+      .send({ question: 'What are credits?' });
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatchObject({ code: 'FAQ_UNAVAILABLE' });
+  });
+
+  it('keeps asking available when only the ticket store is broken (500 SUPPORT_UNAVAILABLE)', async () => {
+    const app = build({ ticketFails: true });
+    const ask = await request(app).post('/v1/faq/ask').set('Authorization', 'Bearer user-1').send({ question: 'What are credits?' });
+    expect(ask.status).toBe(200);
+    const ticket = await request(app)
+      .post('/v1/faq/support-requests')
+      .set('Authorization', 'Bearer user-1')
+      .send({ question: 'My runner never delivered', replyTo: 'me@u.nus.edu' });
+    expect(ticket.status).toBe(500);
+    expect(ticket.body.error).toMatchObject({ code: 'SUPPORT_UNAVAILABLE' });
   });
 
   describe('PATCH /v1/faq/support-requests/:id (admin state machine)', () => {

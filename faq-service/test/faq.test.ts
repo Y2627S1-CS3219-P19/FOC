@@ -59,6 +59,9 @@ class InMemoryFaqStore implements FaqStore {
       .sort((a, b) => b[1] - a[1])
       .slice(0, k);
   }
+  async count(): Promise<number> {
+    return this.rows.length;
+  }
   async ping(): Promise<void> {}
 }
 

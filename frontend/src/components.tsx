@@ -25,6 +25,16 @@ export function ErrorBox({ error }: { error: unknown }) {
   );
 }
 
+/** One message for any FAQ unavailability. The cause stays in logs and /health/ready. */
+export function FaqUnavailable({ email }: { email?: string }) {
+  return (
+    <div className="alert alert-error" role="status">
+      <div>The FAQ service is currently unavailable. Please try again in a few minutes.</div>
+      {email && <div className="small muted">Other pages keep working normally.</div>}
+    </div>
+  );
+}
+
 export function FieldError({ error, field }: { error: unknown; field: string }) {
   if (!(error instanceof ApiError)) return null;
   const msg = error.fieldErrors[field];

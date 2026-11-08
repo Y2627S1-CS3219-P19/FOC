@@ -9,6 +9,8 @@ export interface FaqStore {
   addDocuments(documents: Document[], options?: { ids?: string[] }): Promise<void>;
   /** Returns [document, cosine similarity] with similarity in 0..1, higher is better. */
   similaritySearchWithScore(query: string, k: number): Promise<[Document, number][]>;
+  /** How many chunks the collection holds — lets boot skip re-embedding an unchanged corpus. */
+  count(): Promise<number>;
   /** Cheap server liveness probe for the health check. */
   ping(): Promise<void>;
 }
@@ -22,6 +24,7 @@ export class ChromaFaqStore extends VectorStore implements FaqStore {
   private collectionName: string;
   private collection: Promise<{
     upsert(params: { ids: string[]; embeddings: number[][]; documents: string[]; metadatas: Record<string, unknown>[] }): Promise<unknown>;
+    count(): Promise<number>;
     query(params: { queryEmbeddings: number[][]; nResults: number; include?: string[] }): Promise<{
       documents: string[][];
       metadatas: Record<string, unknown>[][];
@@ -74,6 +77,11 @@ export class ChromaFaqStore extends VectorStore implements FaqStore {
     return res.documents[0].map(
       (text, i) => [new Document({ pageContent: text, metadata: res.metadatas[0][i] }), 1 - res.distances[0][i]] as [Document, number],
     );
+  }
+
+  async count(): Promise<number> {
+    const collection = await this.getCollection();
+    return collection.count();
   }
 
   async ping(): Promise<void> {

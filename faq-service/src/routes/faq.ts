@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { parseOrThrow, requireRole } from '@foc/shared-middleware';
+import { AppError, parseOrThrow, requireRole, serviceUnavailable } from '@foc/shared-middleware';
 import type { AppContext } from '../context.js';
 import { ask } from '../faq.js';
 import { newTicket, type TicketStatus } from '../sqlTickets.js';
@@ -13,6 +13,19 @@ const ticketSchema = z.object({
   replyTo: z.string().email().max(200).optional(),
 });
 const transitionSchema = z.object({ status: z.enum(['under_review', 'resolved']) });
+
+/** One user-facing message for any unavailability. The reason stays in logs and /health/ready. */
+const FAQ_UNAVAILABLE_MESSAGE = 'The FAQ service is currently unavailable. Please try again later.';
+const RETRY_AFTER_SECONDS = '30';
+
+/** 503, not 500: the caller should retry later, it is not a bad request. */
+function unavailable(res: { set: (k: string, v: string) => unknown }) {
+  res.set('Retry-After', RETRY_AFTER_SECONDS);
+  return serviceUnavailable('FAQ_UNAVAILABLE', FAQ_UNAVAILABLE_MESSAGE);
+}
+
+/** Serving = the KB has chunks. A service that refuses every question is not available. */
+const isServing = (ctx: AppContext) => ctx.kb.ready && ctx.kb.chunks > 0;
 
 // State machine: open → under review → resolved, plus direct open → resolved.
 const ALLOWED_FROM: Record<'under_review' | 'resolved', TicketStatus[]> = {
@@ -28,10 +41,13 @@ export function faqRouter(ctx: AppContext): Router {
   router.post('/ask', async (req, res, next) => {
     try {
       const { question } = parseOrThrow(askSchema, req.body);
-      const response = await ask(ctx, question);
-      res.json(response);
+      if (!isServing(ctx)) return void next(unavailable(res));
+      res.json(await ask(ctx, question));
     } catch (err) {
-      next(err);
+      if (err instanceof AppError) return void next(err);
+      // Retrieval or generation failed: a dependency problem, so say "later" rather than 500.
+      ctx.logger.error({ err }, 'FAQ ask failed');
+      next(unavailable(res));
     }
   });
 
@@ -39,6 +55,7 @@ export function faqRouter(ctx: AppContext): Router {
   router.get('/search', async (req, res, next) => {
     try {
       const { q } = parseOrThrow(searchSchema, req.query);
+      if (!isServing(ctx)) return void next(unavailable(res));
       const chunks = await ctx.retrieve(q, ctx.config.topK);
       res.json({
         results: chunks.map((c) => ({
@@ -49,7 +66,9 @@ export function faqRouter(ctx: AppContext): Router {
         })),
       });
     } catch (err) {
-      next(err);
+      if (err instanceof AppError) return void next(err);
+      ctx.logger.error({ err }, 'FAQ search failed');
+      next(unavailable(res));
     }
   });
 
@@ -76,7 +95,10 @@ export function faqRouter(ctx: AppContext): Router {
       ctx.logger.info({ ticketId: ticket.ticketId }, 'Support request created');
       res.status(201).json({ ticketId: ticket.ticketId, status: ticket.status });
     } catch (err) {
-      next(err);
+      if (err instanceof AppError) return void next(err);
+      // Ask keeps working when only the ticket database is broken, so this is a 500, not a 503.
+      ctx.logger.error({ err }, 'Could not store the support request');
+      next(new AppError(500, 'SUPPORT_UNAVAILABLE', 'Support requests are temporarily unavailable. Please try again later.'));
     }
   });
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useApi } from '../api';
 import { useAuth } from '../auth';
-import { ErrorBox } from '../components';
+import { FaqUnavailable } from '../components';
 import { faqAnchor, useFaq, type FaqEntry } from '../faq';
 
 /** The dedicated FAQ page: browse the knowledge base, ask the bot, or raise a support request. */
@@ -34,8 +34,8 @@ export function FaqPage() {
 
   const res = faq.res;
   const refused = res?.answer === null;
-  // A refusal pre-fills the raise form; the user can also open it any time.
-  const showRaise = raiseOpen || refused;
+  // The form opens only when the user clicks; a refusal just offers it (see faq.raiseHint).
+  const showRaise = raiseOpen;
 
   return (
     <div className="stack narrow" style={{ margin: '24px auto' }}>
@@ -43,7 +43,8 @@ export function FaqPage() {
 
       <div className="card soft stack">
         <span className="eyebrow">Ask about FoC</span>
-        <div className="row">
+        {faq.unavailable && <FaqUnavailable email={claims?.email} />}
+        <div className="row" hidden={faq.unavailable}>
           <input
             placeholder="e.g. how do credits move?"
             value={faq.question}
@@ -72,17 +73,47 @@ export function FaqPage() {
             </p>
           </div>
         )}
+        {refused && faq.lastAnswer && (
+          <div className="stack">
+            <p className="small muted">Your earlier question: “{faq.lastAnswer.question}”</p>
+            <p>{faq.lastAnswer.response.answer}</p>
+            {faq.lastAnswer.response.citations.map((c) => (
+              <Link key={c.index} to={`/faq#${faqAnchor(c.source, c.heading)}`} className="small">
+                – {c.heading}
+              </Link>
+            ))}
+          </div>
+        )}
         {refused && (
-          <p className="small muted">
-            I'm not sure about that one. Closest topics:{' '}
-            {res.suggestions.map((s) => s.heading).join(' · ') || 'none found'}.
-          </p>
+          <div className="stack">
+            <p className="small muted">
+              I'm not sure about that one. Closest topics:{' '}
+              {res.suggestions.length === 0 && 'none found'}
+            </p>
+            {res.suggestions.map((s) => (
+              <Link key={s.heading} to={`/faq#${faqAnchor(s.source, s.heading)}`} className="small">
+                – {s.heading}
+              </Link>
+            ))}
+            {faq.raiseHint && !showRaise && (
+              <button className="ghost small" onClick={() => setRaiseOpen(true)}>
+                Still stuck? Raise a support request
+              </button>
+            )}
+          </div>
         )}
       </div>
 
-      {showRaise && (
+      {(showRaise || faq.ticket) && (
         <div className="card stack">
-          <span className="eyebrow">Raise a support request</span>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="eyebrow">Raise a support request</span>
+            {showRaise && (
+              <button className="ghost small" onClick={() => setRaiseOpen(false)}>
+                Close
+              </button>
+            )}
+          </div>
           {faq.ticket ? (
             <p className="small">
               Support request created ({faq.ticket.ticketId}). An admin will reach out to{' '}
@@ -91,6 +122,7 @@ export function FaqPage() {
           ) : (
             <div className="stack">
               <p className="small">Stuck? Send your question to the team and we'll reach back.</p>
+              {faq.ticketError && <p className="small">{faq.ticketError}</p>}
               <label>
                 Your question
                 <textarea
@@ -123,7 +155,7 @@ export function FaqPage() {
 
       <div className="card stack">
         <span className="eyebrow">Browse the knowledge base</span>
-        <ErrorBox error={entriesError} />
+        {entriesError ? <FaqUnavailable email={claims?.email} /> : null}
         {!entries && !entriesError && <p className="small muted">Loading…</p>}
         {entries?.length === 0 && <p className="small muted">The knowledge base is empty.</p>}
         {entries?.map((e) => {

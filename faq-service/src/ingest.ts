@@ -28,3 +28,47 @@ export async function ingestCorpus(
   await store.addDocuments(docs, { ids: chunkIds(docs) });
   return docs.length;
 }
+
+export interface RetryOptions {
+  attempts?: number;
+  delayMs?: number;
+  logger?: {
+    info?: (fields: Record<string, unknown>, msg: string) => void;
+    warn: (fields: Record<string, unknown>, msg: string) => void;
+  };
+}
+
+/**
+ * Ingest with a bounded retry, skipping the work when the collection already holds the corpus.
+ *
+ * The store may still be starting when this runs (compose starts Chroma, ECS starts containers
+ * concurrently), so waiting is the fix for that race. Ingest is idempotent (deterministic ids), so
+ * a retry never duplicates. The count guard stops a restart loop from re-embedding the whole
+ * corpus on every boot, which would burn embedding quota for nothing.
+ *
+ * Throws once every attempt has failed: the caller treats that as fatal, so the platform rolls
+ * the deploy back instead of serving refusals to everyone.
+ */
+export async function ingestWithRetry(
+  store: FaqStore,
+  corpusDir: string,
+  { attempts = 3, delayMs = 5000, logger }: RetryOptions = {},
+): Promise<number> {
+  const expected = loadCorpusDocs(corpusDir).length;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const existing = await store.count();
+      if (existing === expected) {
+        logger?.info?.({ chunks: existing }, 'Corpus already ingested, skipping');
+        return existing;
+      }
+      return await ingestCorpus(store, corpusDir);
+    } catch (err) {
+      lastError = err;
+      logger?.warn({ err, attempt, attempts }, 'Corpus ingestion attempt failed');
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
