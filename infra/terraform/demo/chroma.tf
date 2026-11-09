@@ -115,4 +115,8 @@ module "faq_service" {
   namespace_arn      = local.service_common.namespace_arn
   subnet_ids         = local.service_common.subnet_ids
   security_group_ids = local.service_common.security_group_ids
+
+  # First boot needs the SSM secrets (put-secrets.ps1) and faq_db (the foc-admin one-off task),
+  # both of which happen after this apply — steady state is CI's job from the first deploy on.
+  wait_for_steady_state = false
 }
