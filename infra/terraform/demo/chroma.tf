@@ -48,6 +48,8 @@ module "chroma" {
   image = "chromadb/chroma:1.5.9"
   port  = 8000
   cpu   = 512
+  # 512 CPU is only valid with >= 1 GB on Fargate; a full GB for the KB database.
+  memory = 1024
   # Regular FARGATE, not Spot: like rabbitmq, the data (ingested knowledge base) must survive,
   # and Spot reclaims would drop the EFS mount mid-write.
   capacity_provider     = "FARGATE"
