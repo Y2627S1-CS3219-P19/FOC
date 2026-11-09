@@ -179,6 +179,9 @@ dl.details dd { margin: 0; }
 .tabs { display: inline-flex; background: var(--surface); border-radius: 999px; padding: 4px; gap: 4px; }
 .tabs button { border: none; background: transparent; padding: 7px 16px; }
 .tabs button[aria-selected='true'] { background: var(--card); box-shadow: var(--shadow-sm); }
+.tabs a { text-decoration: none; color: var(--text); font-weight: 600; padding: 7px 16px; border-radius: 999px; white-space: nowrap; }
+.tabs a.active { background: var(--card); box-shadow: var(--shadow-sm); }
+.admin-nav { max-width: 100%; overflow-x: auto; align-self: flex-start; }
 
 /* Floating help chat (F28): bottom-right FAB on every signed-in page, popup above it. */
 .faq-fab { position: fixed; right: 20px; bottom: 20px; z-index: 40; width: 52px; height: 52px; border-radius: 50%;
