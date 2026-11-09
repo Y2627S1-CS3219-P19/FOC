@@ -183,6 +183,17 @@ dl.details dd { margin: 0; }
 .tabs a.active { background: var(--card); box-shadow: var(--shadow-sm); }
 .admin-nav { max-width: 100%; overflow-x: auto; align-self: flex-start; }
 
+/* Floating help chat (F28): bottom-right FAB on every signed-in page, popup above it. */
+.faq-fab { position: fixed; right: 20px; bottom: 20px; z-index: 40; width: 52px; height: 52px; border-radius: 50%;
+  font-size: 1.4rem; font-weight: 600; background: var(--primary); color: #fff; border: none; box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.faq-fab:hover { background: var(--primary-dark); }
+.faq-popup { position: fixed; right: 20px; bottom: 84px; z-index: 40; width: min(360px, calc(100vw - 40px));
+  max-height: min(70vh, 560px); overflow-y: auto; }
+.faq-entry summary { cursor: pointer; font-weight: 600; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+.faq-entry:last-of-type summary { border-bottom: none; }
+.faq-entry { scroll-margin-top: 70px; }
+
 /* ---------- Tablet / phone ---------- */
 @media (max-width: 1050px) {
   .board, .board.with-drawer, .two-col { grid-template-columns: 1fr; }
@@ -204,6 +215,9 @@ dl.details dd { margin: 0; }
   .topbar nav .desktop-only { display: none; }
   .supplier-detail { flex-direction: column; }
   .supplier-detail img { width: 100%; }
+  /* Keep the help FAB above the bottom tab bar */
+  .faq-fab { bottom: 84px; }
+  .faq-popup { bottom: 148px; }
   /* Bottom tab bar, like the mobile screens of the design */
   .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--bg); border-top: 1px solid var(--border);
     padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); }

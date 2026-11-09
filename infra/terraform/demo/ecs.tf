@@ -33,7 +33,7 @@ resource "aws_ecs_cluster_capacity_providers" "main" {
 
 # Logs are JSON (pino), so CloudWatch Logs Insights can follow one correlationId across services.
 resource "aws_cloudwatch_log_group" "service" {
-  for_each = toset(concat(local.images, ["rabbitmq", "admin"]))
+  for_each = toset(concat(local.images, ["rabbitmq", "chroma", "admin"]))
 
   name              = "/foc/${each.key}"
   retention_in_days = 90 # NFR18.1

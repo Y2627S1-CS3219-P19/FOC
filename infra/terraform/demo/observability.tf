@@ -189,3 +189,51 @@ resource "aws_cloudwatch_event_target" "ecs_problems" {
   rule = aws_cloudwatch_event_rule.ecs_problems.name
   arn  = aws_sns_topic.alerts.arn
 }
+
+# ---- FAQ RAG quality signals (F28) --------------------------------------------------------------
+# faq-service logs one structured line per ask: msg "faq ask" with refused / top1Similarity /
+# durationMs. No alerting by design (user, 7 Nov): these are dashboard-only quality signals.
+# The refusal rate is the RAG health indicator - creeping up means the corpus no longer covers
+# what students ask, or FAQ_SIMILARITY_FLOOR is mis-tuned.
+
+resource "aws_cloudwatch_log_metric_filter" "faq_asks" {
+  name           = "foc-faq-service-asks"
+  log_group_name = aws_cloudwatch_log_group.service["faq-service"].name
+  pattern        = "{ $.msg = \"faq ask\" }"
+
+  metric_transformation {
+    name          = "FaqAsks"
+    namespace     = local.metrics_namespace
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+# Boolean JSON fields match as strings in filter patterns.
+resource "aws_cloudwatch_log_metric_filter" "faq_refusals" {
+  name           = "foc-faq-service-refusals"
+  log_group_name = aws_cloudwatch_log_group.service["faq-service"].name
+  pattern        = "{ $.msg = \"faq ask\" && $.refused = true }"
+
+  metric_transformation {
+    name          = "FaqRefusals"
+    namespace     = local.metrics_namespace
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "faq_latency" {
+  name           = "foc-faq-service-latency"
+  log_group_name = aws_cloudwatch_log_group.service["faq-service"].name
+  pattern        = "{ $.msg = \"faq ask\" && $.durationMs >= 0 }"
+
+  metric_transformation {
+    name      = "FaqAskDurationMs"
+    namespace = local.metrics_namespace
+    value     = "$.durationMs"
+    unit      = "Milliseconds"
+  }
+}

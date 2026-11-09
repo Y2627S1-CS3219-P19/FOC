@@ -44,6 +44,7 @@ jobs:
             frontend: [*shared, *workspace, 'frontend/**']
             supplier-service: [*shared, 'supplier-service/**', 'data/**']
             gateway: [*shared, 'gateway/**']
+            faq-service: [*shared, *workspace, 'faq-service/**']
             keycloak: [*shared, 'infra/keycloak/**']
       - id: matrix
         env:
@@ -55,6 +56,7 @@ jobs:
               "user-service":     {kind: "node", deps: "users-db keycloak mailpit", context: ".", dockerfile: "user-service/Dockerfile"},
               "credit-service":   {kind: "node", deps: "credits-db", context: ".", dockerfile: "credit-service/Dockerfile"},
               "order-service":    {kind: "node", deps: "orders-db", context: ".", dockerfile: "order-service/Dockerfile"},
+              "faq-service":      {kind: "node", deps: "faq-db", context: ".", dockerfile: "faq-service/Dockerfile"},
               "frontend":         {kind: "frontend", deps: "", context: ".", dockerfile: "frontend/Dockerfile"},
               "supplier-service": {kind: "supplier", deps: "", context: ".", dockerfile: "supplier-service/Dockerfile"},
               "gateway":          {kind: "gateway", deps: "", context: "gateway", dockerfile: "gateway/Dockerfile"},
@@ -79,6 +81,9 @@ jobs:
     env:
       # order-service tests create a throwaway orders_test database; the password is the .env.example value.
       ORDERS_TEST_ADMIN_URL: postgres://orders:change-me-orders-db@localhost:5436/postgres
+      # faq-service store tests run against the compose faq-db, which is empty in CI (password is the
+      # .env.example value). Unset, the 4 SQL tests skip and the rest still run.
+      FAQ_TEST_DATABASE_URL: postgres://faq:change-me-faq-db@localhost:5438/faq_db
       TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,6 +153,7 @@ jobs:
           docker run --rm
           --add-host user-service:127.0.0.1 --add-host supplier-service:127.0.0.1
           --add-host credit-service:127.0.0.1 --add-host order-service:127.0.0.1
+          --add-host faq-service:127.0.0.1
           --add-host frontend:127.0.0.1
           foc-ci/gateway nginx -t
 

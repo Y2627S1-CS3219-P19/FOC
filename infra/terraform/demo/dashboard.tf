@@ -3,7 +3,7 @@
 # Console: CloudWatch > Dashboards > foc.
 
 locals {
-  ecs_services = concat(local.images, ["rabbitmq"])
+  ecs_services = concat(local.images, ["rabbitmq", "chroma"])
 
   # Only these services log JSON with a pino "level". supplier-service uses console.log.
   error_log_groups = ["user-service", "credit-service", "order-service"]
@@ -142,9 +142,28 @@ resource "aws_cloudwatch_dashboard" "main" {
         }
       }),
 
+      # ---- FAQ RAG quality (F28, from faq-service logs) ----
+      merge(local.metric_widget, {
+        x = 0, y = 27
+        properties = {
+          title = "FAQ asks and refusals", region = var.region, period = 300, view = "timeSeries"
+          metrics = [
+            [local.metrics_namespace, "FaqAsks", { label = "asks", stat = "Sum" }],
+            [local.metrics_namespace, "FaqRefusals", { label = "refusals", stat = "Sum" }],
+          ]
+        }
+      }),
+      merge(local.metric_widget, {
+        x = 8, y = 27
+        properties = {
+          title = "FAQ ask duration", region = var.region, stat = "Average", period = 300, view = "timeSeries"
+          metrics = [[local.metrics_namespace, "FaqAskDurationMs", { label = "avg ms", stat = "Average" }]]
+        }
+      }),
+
       # ---- Recent errors (Logs Insights) ----
       {
-        type = "log", x = 0, y = 27, width = 24, height = 8
+        type = "log", x = 0, y = 33, width = 24, height = 8
         properties = {
           title  = "Recent errors (pino level >= 50)"
           region = var.region

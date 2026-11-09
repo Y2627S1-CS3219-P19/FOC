@@ -42,5 +42,5 @@ locals {
   account_id = data.aws_caller_identity.current.account_id
 
   # The 7 container images; each gets an ECR repo foc/<name>, a log group and an ECS service.
-  images = ["user-service", "supplier-service", "credit-service", "order-service", "frontend", "gateway", "keycloak"]
+  images = ["user-service", "supplier-service", "credit-service", "order-service", "faq-service", "frontend", "gateway", "keycloak"]
 }

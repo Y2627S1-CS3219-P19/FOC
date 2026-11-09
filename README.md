@@ -34,7 +34,7 @@ microservice (`user-service/`, `supplier-service/`, `order-service/`,
 ├── supplier-service/
 ├── order-service/
 ├── credit-service/
-├── <n2h-service>/
+├── faq-service/        (N2H: customer relations, F28)
 └── README.md
 ```
 
@@ -106,5 +106,49 @@ npm test
 curl -X POST http://localhost:8080/realms/campuserrand/protocol/openid-connect/token \
   -d grant_type=password -d client_id=campuserrand-test -d username=<user> -d password=<pass>
 ```
+
+---
+
+## Customer Relations (N2H, F28) — FAQ RAG service (`faq-service/`)
+
+A RAG-based FAQ assistant (nice-to-have F28). A signed-in student asks a question in the web app
+and gets an answer grounded in a hand-written FAQ corpus, with citations; anything the corpus
+cannot answer can be escalated to the team as a support request.
+
+**F28 mapping.**
+
+- **F28.1 knowledge base** — `faq-service/corpus/faq.md` (28 hand-reviewed Q/A chunks) ingested
+  into a Chroma vector database (automatically on faq-service startup; idempotent upsert).
+- **F28.2 conversational assistance** — `POST /v1/faq/ask`: cosine top-k retrieval, strict
+  "answer only from these passages, cite them" prompt. Below the similarity floor the bot refuses
+  and suggests the nearest topics.
+- **F28.3 support escalation** — login-gated server-side tickets
+  (`POST /v1/faq/support-requests`; admin triage via `GET`). Escalation is user-decided: the
+  "Raise a support request" form is always available, and a refusal only pre-fills it. Admins
+  move a ticket `open → under review → resolved` (`PATCH`, admin-only) and see an append-only
+  history of every transition on the "Admin: FAQ tickets" page.
+
+**Architecture.** Express 5 + `@foc/shared-middleware` (the house pattern). Two stores: **Chroma**
+for the knowledge-base vectors, **Postgres (`faq_db`)** for the tickets — transactional records
+with an insert-only status history, so they live in SQL rather than in a vector database.
+Embeddings: `gemini-embedding-001` via the Gemini API. Generation: OpenRouter chat client. In the
+UI: a dedicated `/faq` page (browse the KB, ask, raise a ticket) and a floating chat widget on
+every signed-in page.
+
+**Observability.** Every ask writes one structured pino line (`faq ask`) with the refusal flag,
+top-1 similarity and duration. CloudWatch log metric filters turn those into the `FOC/FaqAsks`,
+`FOC/FaqRefusals` and `FOC/FaqAskDurationMs` metrics on the shared `foc` dashboard, so RAG answer
+quality sits next to the DLQ and outbox signals. Signals only, no alerting.
+
+**Why not Bedrock?** The NUS AWS organisation SCP denies `bedrock:InvokeModel` account-wide
+(verified live 5 Nov), so the model layer is provider-agnostic by design: embeddings and
+generation are each one module (`faq-service/src/modelClient.ts`) and the store sits behind the
+`FaqStore` interface (`faq-service/src/chroma.ts`) — swapping to Bedrock, pgvector (the
+lower-infra fallback) or another vector DB is a one-module change plus a re-ingest.
+
+**Keys.** `GEMINI_API_KEY` / `OPENROUTER_API_KEY` in `.env` locally (gitignored; see
+`.env.example`), `/foc/faq-service/*` in SSM in prod (via `infra/terraform/scripts/put-secrets.ps1`).
+
+See `faq-service/README.md` for endpoints, ingestion and the escalation design.
 
 ---

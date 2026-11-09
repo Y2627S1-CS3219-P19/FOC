@@ -6,11 +6,14 @@ import { useWallet } from './errands';
 import { AdminRoleChangesPage } from './pages/AdminRoleChanges';
 import { AdminAuditPage } from './pages/AdminAudit';
 import { AdminCreditsPage } from './pages/AdminCredits';
+import { AdminFaqTicketsPage } from './pages/AdminFaqTickets';
 import { AdminOrdersPage } from './pages/AdminOrders';
 import { AdminUsersPage } from './pages/AdminUsers';
 import { BoardPage } from './pages/Board';
 import { CreditsPage } from './pages/Credits';
 import { ErrandDetailPage } from './pages/ErrandDetail';
+import { FaqChatWidget } from './pages/FaqChatWidget';
+import { FaqPage } from './pages/FaqPage';
 import { HomePage } from './pages/Home';
 import { MyErrandsPage } from './pages/MyErrands';
 import { NewErrandPage } from './pages/NewErrand';
@@ -79,6 +82,7 @@ function AdminLayout() {
         <NavLink to="credits">Credits</NavLink>
         <NavLink to="orders">Orders</NavLink>
         <NavLink to="audit">Audit log</NavLink>
+        <NavLink to="faq-tickets">FAQ tickets</NavLink>
       </nav>
       <Outlet />
     </div>
@@ -118,6 +122,9 @@ export function App() {
               <NavLink to="/credits" onClick={close}>
                 Credits
               </NavLink>
+              <NavLink to="/faq" onClick={close}>
+                FAQ
+              </NavLink>
               <NavLink to="/profile" onClick={close}>
                 Me
               </NavLink>
@@ -154,6 +161,7 @@ export function App() {
           <Route path="/errands/new" element={<RequireLogin><NewErrandPage /></RequireLogin>} />
           <Route path="/errands/:id" element={<RequireLogin><ErrandDetailPage /></RequireLogin>} />
           <Route path="/credits" element={<RequireLogin><CreditsPage /></RequireLogin>} />
+          <Route path="/faq" element={<RequireLogin><FaqPage /></RequireLogin>} />
           <Route path="/suppliers" element={<RequireLogin><SuppliersPage /></RequireLogin>} />
           <Route path="/suppliers/new" element={<RequireAdmin><SupplierFormPage /></RequireAdmin>} />
           <Route path="/suppliers/:id" element={<RequireLogin><SupplierDetailPage /></RequireLogin>} />
@@ -165,11 +173,13 @@ export function App() {
             <Route path="credits" element={<AdminCreditsPage />} />
             <Route path="orders" element={<AdminOrdersPage />} />
             <Route path="audit" element={<AdminAuditPage />} />
+            <Route path="faq-tickets" element={<AdminFaqTicketsPage />} />
           </Route>
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </main>
       {user && <TabBar />}
+      {user && <FaqChatWidget />}
     </>
   );
 }

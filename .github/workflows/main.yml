@@ -34,7 +34,7 @@ permissions:
   contents: read
 
 env:
-  ALL_IMAGES: '["user-service","supplier-service","credit-service","order-service","frontend","gateway","keycloak"]'
+  ALL_IMAGES: '["user-service","supplier-service","credit-service","order-service","faq-service","frontend","gateway","keycloak"]'
 
 jobs:
   changes:
@@ -91,6 +91,7 @@ jobs:
             frontend: [*shared, *workspace, 'frontend/**']
             supplier-service: [*shared, 'supplier-service/**', 'data/**']
             gateway: [*shared, 'gateway/**']
+            faq-service: [*shared, *workspace, 'faq-service/**']
             keycloak: [*shared, 'infra/keycloak/**']
 
       - id: result
