@@ -45,7 +45,9 @@ locals {
       RABBITMQ_DEFAULT_PASS = "/foc/rabbitmq/RABBITMQ_DEFAULT_PASS"
     }
     faq-service = {
-      DATABASE_URL       = "/foc/faq-service/DATABASE_URL"
+      # Env var name is FAQ_DATABASE_URL (faq's config prefix); the SSM path follows the
+      # /foc/<service>/<name> convention shared with put-secrets.ps1.
+      FAQ_DATABASE_URL   = "/foc/faq-service/DATABASE_URL"
       GEMINI_API_KEY     = "/foc/faq-service/GEMINI_API_KEY"
       OPENROUTER_API_KEY = "/foc/faq-service/OPENROUTER_API_KEY"
     }
