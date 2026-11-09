@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, userManager } from './auth';
 import { RequireAdmin, RequireLogin } from './components';
 import { useWallet } from './errands';
@@ -69,6 +69,22 @@ function TabBar() {
   );
 }
 
+/** Sub-nav shared by all admin pages, so the top bar only needs one "Admin" link. */
+function AdminLayout() {
+  return (
+    <div className="stack">
+      <nav className="tabs admin-nav" aria-label="Admin">
+        <NavLink to="users">Users</NavLink>
+        <NavLink to="role-changes">Role changes</NavLink>
+        <NavLink to="credits">Credits</NavLink>
+        <NavLink to="orders">Orders</NavLink>
+        <NavLink to="audit">Audit log</NavLink>
+      </nav>
+      <Outlet />
+    </div>
+  );
+}
+
 export function App() {
   const { user, isAdmin, login, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -108,23 +124,9 @@ export function App() {
             </>
           )}
           {isAdmin && (
-            <>
-              <NavLink to="/admin/users" onClick={close}>
-                Admin: users
-              </NavLink>
-              <NavLink to="/admin/role-changes" onClick={close}>
-                Admin: role changes
-              </NavLink>
-              <NavLink to="/admin/credits" onClick={close}>
-                Admin: credits
-              </NavLink>
-              <NavLink to="/admin/orders" onClick={close}>
-                Admin: orders
-              </NavLink>
-              <NavLink to="/admin/audit" onClick={close}>
-                Admin: audit log
-              </NavLink>
-            </>
+            <NavLink to="/admin" onClick={close}>
+              Admin
+            </NavLink>
           )}
           {user && <CreditPill />}
           {user ? (
@@ -156,11 +158,14 @@ export function App() {
           <Route path="/suppliers/new" element={<RequireAdmin><SupplierFormPage /></RequireAdmin>} />
           <Route path="/suppliers/:id" element={<RequireLogin><SupplierDetailPage /></RequireLogin>} />
           <Route path="/suppliers/:id/edit" element={<RequireAdmin><SupplierFormPage /></RequireAdmin>} />
-          <Route path="/admin/users" element={<RequireAdmin><AdminUsersPage /></RequireAdmin>} />
-          <Route path="/admin/role-changes" element={<RequireAdmin><AdminRoleChangesPage /></RequireAdmin>} />
-          <Route path="/admin/credits" element={<RequireAdmin><AdminCreditsPage /></RequireAdmin>} />
-          <Route path="/admin/orders" element={<RequireAdmin><AdminOrdersPage /></RequireAdmin>} />
-          <Route path="/admin/audit" element={<RequireAdmin><AdminAuditPage /></RequireAdmin>} />
+          <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+            <Route index element={<Navigate to="users" replace />} />
+            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="role-changes" element={<AdminRoleChangesPage />} />
+            <Route path="credits" element={<AdminCreditsPage />} />
+            <Route path="orders" element={<AdminOrdersPage />} />
+            <Route path="audit" element={<AdminAuditPage />} />
+          </Route>
           <Route path="*" element={<p>Page not found.</p>} />
         </Routes>
       </main>
