@@ -72,6 +72,30 @@ rolls back and the script says so. Do not touch `initial_image_tag` for this.
 To make a Terraform env/secret change reach a running service: apply, then redeploy that service
 (Run workflow with services `<svc>`, or `deploy.ps1 -Services <svc> -Tag <running sha>`).
 
+## Adding a service to the running stack
+
+The two-phase start above only covers the initial batch: `initial_image_tag` pins every task
+definition to one shared SHA, and services can only be created healthy when their image, secrets
+and database already exist. A service added later (like faq-service in PR #46) needs this order —
+infra code merges in a PR, but it only takes effect at the apply, never at the merge:
+
+1. Merge the PR (infra + service code). CI's first push **will 403** — the ECR repo and CI push
+   role exist only after the next step.
+2. `terraform apply` from clean `main`. This creates the ECR repo, extends the `foc-deploy` push
+   role, and registers the task definitions.
+3. Write the service's SSM secrets (`put-secrets.ps1`) and run the `foc-admin` task if the service
+   needs a new database (its SQL is in the task definition).
+4. Re-run the failed `main.yml` run (or Run workflow): push the image, register a revision from
+   it, deploy, and the service goes healthy.
+
+Notes: the ECS service module sets `wait_for_steady_state = false` for a service whose first boot
+depends on post-apply steps (see `demo/chroma.tf`, faq-service) — don't flip it back on. New
+services also need their own entries in `local.images` (providers.tf), `ssm.tf` (env var names —
+they must match the service's config), and the service map for secrets. When a task-definition
+change (health check, env, memory) has no image to ride along — chroma is the example, it is a
+public image with no CI build — apply, then point the service at the new revision by hand:
+`aws ecs update-service --cluster foc --service <svc> --task-definition foc-<svc>`.
+
 ## Team access (read-only)
 
 IAM users are blocked by the NUS organisation, so teammates use their OWN NUS sandbox account and
