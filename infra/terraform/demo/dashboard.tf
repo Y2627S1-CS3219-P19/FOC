@@ -156,7 +156,7 @@ resource "aws_cloudwatch_dashboard" "main" {
       merge(local.metric_widget, {
         x = 8, y = 27
         properties = {
-          title = "FAQ ask duration", region = var.region, stat = "Average", period = 300, view = "timeSeries"
+          title   = "FAQ ask duration", region = var.region, stat = "Average", period = 300, view = "timeSeries"
           metrics = [[local.metrics_namespace, "FaqAskDurationMs", { label = "avg ms", stat = "Average" }]]
         }
       }),
