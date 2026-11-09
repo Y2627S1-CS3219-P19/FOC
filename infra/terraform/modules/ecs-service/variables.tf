@@ -45,7 +45,9 @@ variable "secrets" {
 }
 
 variable "health_check_command" {
-  type = list(string)
+  description = "Container health check command. null = no health check (the task counts healthy once running)."
+  type        = list(string)
+  default     = null
 }
 
 variable "health_check_start_period" {

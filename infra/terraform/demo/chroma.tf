@@ -62,8 +62,10 @@ module "chroma" {
 
   # The chroma image has no wget/curl/python on PATH (compose.yaml documents this), so the ECS
   # health check uses bash's /dev/tcp — same pattern as the keycloak service in services.tf.
-  health_check_command      = ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8000 && printf 'GET /api/v2/heartbeat HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'"]
-  health_check_start_period = 120
+  # The chroma image has no wget/curl/python on PATH (compose.yaml documents this — the local
+  # container has no healthcheck for the same reason), and /bin/sh is dash, so even bash's
+  # /dev/tcp trick is unavailable. faq-service's /health/ready pings chroma and is the combined
+  # readiness gate, exactly like the local stack.
 
   volumes = [{
     name = "chroma-data"

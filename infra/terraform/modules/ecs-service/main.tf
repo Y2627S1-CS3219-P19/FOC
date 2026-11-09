@@ -51,7 +51,7 @@ resource "aws_ecs_task_definition" "this" {
     environment = [for k in sort(keys(var.environment)) : { name = k, value = var.environment[k] }]
     secrets     = [for k in sort(keys(var.secrets)) : { name = k, valueFrom = var.secrets[k] }]
 
-    healthCheck = {
+    healthCheck = var.health_check_command == null ? null : {
       command     = var.health_check_command
       interval    = 15
       timeout     = 10 # rabbitmq-diagnostics is slow on 0.25 vCPU
