@@ -20,7 +20,7 @@ resource "aws_efs_file_system" "chroma" {
 resource "aws_efs_mount_target" "chroma" {
   count           = var.services_enabled ? length(aws_subnet.private) : 0
   file_system_id  = aws_efs_file_system.chroma[0].id
-  subnet_id       = aws_subnet.private[count.index]
+  subnet_id       = aws_subnet.private[count.index].id
   security_groups = [aws_security_group.tasks.id]
 }
 
