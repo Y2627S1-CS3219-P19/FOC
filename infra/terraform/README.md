@@ -50,6 +50,12 @@ ECS cannot start a service without an image, and ECR starts empty. So:
    services. Without it, a plain `terraform apply` plans to delete all of them. Never change
    `initial_image_tag` again: CI owns the image from now on.
 
+## Checks on pull requests
+
+pr.yml runs `terraform init -backend=false` + `terraform validate` on `demo/` for any PR that
+touches `infra/terraform/**` (no AWS access, no state). It catches syntax and type errors; it is
+not a plan, so `terraform plan` before every apply is still needed.
+
 ## Deploying a new commit
 
 Automatic: merging to `main` runs `.github/workflows/main.yml`, which builds, scans, pushes and
@@ -71,6 +77,13 @@ that passed pr.yml:
 rolls back and the script says so. Do not touch `initial_image_tag` for this.
 To make a Terraform env/secret change reach a running service: apply, then redeploy that service
 (Run workflow with services `<svc>`, or `deploy.ps1 -Services <svc> -Tag <running sha>`).
+
+**Rollback.** The circuit breaker only rolls back tasks that never get healthy. If a new version is
+healthy but wrong, go back by hand: main.yml's run Summary (and `deploy.ps1`'s output) shows each
+service's revision from before the deploy, with the `aws ecs update-service ... --task-definition
+<that revision>` command to run. That brings back the old image and the old task definition's env
+and secret names; secret values are read from SSM at start, so they stay current. ECR keeps the last
+10 images per repo, so only recent builds can be rolled back to. Then fix forward with a normal PR.
 
 ## Adding a service to the running stack
 
@@ -95,6 +108,7 @@ they must match the service's config), and the service map for secrets. When a t
 change (health check, env, memory) has no image to ride along — chroma is the example, it is a
 public image with no CI build — apply, then point the service at the new revision by hand:
 `aws ecs update-service --cluster foc --service <svc> --task-definition foc-<svc>`.
+
 
 ## Team access (read-only)
 

@@ -31,6 +31,8 @@ pnpm-debug.log*
 .terraform/
 *.tfstate
 *.tfstate.*
+tfplan
+*.tfplan
 *.tfvars
 crash.log
 
@@ -43,3 +45,6 @@ Thumbs.db
 *.swp
 
 .claude
+
+# AI usage traces (raw session files, never commit)
+ai-traces.zip

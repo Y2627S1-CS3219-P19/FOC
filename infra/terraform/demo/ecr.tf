@@ -16,6 +16,8 @@ resource "aws_ecr_repository" "app" {
 }
 
 # Count-based, never age-based: old task definition revisions must still be able to pull for a rollback.
+# The rule does not know which image is running, so keep enough that failed or push-only builds cannot
+# push the running image out (it would then fail to restart or roll back). 10 x 7 repos is ~US$1/month.
 resource "aws_ecr_lifecycle_policy" "app" {
   for_each = aws_ecr_repository.app
 
@@ -23,11 +25,11 @@ resource "aws_ecr_lifecycle_policy" "app" {
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep the last 5 images"
+      description  = "Keep the last 10 images"
       selection = {
         tagStatus   = "any"
         countType   = "imageCountMoreThan"
-        countNumber = 5
+        countNumber = 10
       }
       action = { type = "expire" }
     }]
