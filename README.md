@@ -14,11 +14,10 @@ withdrawn, or exchanged for money, and circulate only within the platform.
 
 | Name | Role |
 | ----- | ----- |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
-| Your Name | Your ownership |
+| Malcolm Chu  | Order service |
+| Gabriel Kua | User service |
+| Nathan Tay | Credit service |
+| Kea Harvan | Supplier service |
 
 ---
 
@@ -152,3 +151,30 @@ lower-infra fallback) or another vector DB is a one-module change plus a re-inge
 See `faq-service/README.md` for endpoints, ingestion and the escalation design.
 
 ---
+
+## AI Use Summary
+
+**Tools:** Claude Code (VS Code extension), model `claude-opus-5-5`.
+
+**Used for:**
+- **Generating code:** service code across the project, such as APIs, database migrations, event
+  handlers, background jobs, tests, Dockerfiles, seed data, frontend pages, and infrastructure
+  config (Docker Compose, the nginx gateway, Terraform).
+- **Refactoring:** restructuring code and build setup, such as the npm workspaces and Dockerfiles.
+- **Debugging:** build and deploy errors, checking that service contracts and events match, and
+  code reviews for bugs.
+- **Explaining:** how existing code, config and tools work.
+
+**Requirements and design:**
+- AI was not used for requirements elicitation.
+- Each service's requirements, tech stack and main design came from the team member who owns it.
+  AI was given these as written briefs to implement.
+- Where AI proposed details or alternatives (for example schema columns, retry and dead-letter
+  handling, or how one service calls another), the service owner reviewed them and made the final
+  decision.
+
+**Verification:** AI-written code was reviewed by the service owner and checked with the test
+suites, typechecks and `docker compose` builds before merging.
+
+**Prompts and key exchanges:** see the per-member logs in [`ai/`](ai/). Each team member adds
+their own prompts there.

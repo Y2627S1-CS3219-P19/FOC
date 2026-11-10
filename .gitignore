@@ -45,3 +45,6 @@ Thumbs.db
 *.swp
 
 .claude
+
+# AI usage traces (raw session files, never commit)
+ai-traces.zip
