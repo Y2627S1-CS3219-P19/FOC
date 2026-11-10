@@ -1,8 +1,8 @@
 # CS3219 — Software Design and Architecture (AY2627 Sem 1)
 
-## Friend on Campus (FoC)
+## Tapau (Friend on Campus)
 
-**Friend on Campus (FoC)** is a peer-to-peer campus errand platform where
+**Tapau** (project name: Friend on Campus, FoC) is a peer-to-peer campus errand platform where
 students can request items to be collected from stores or facilities on
 campus, and other students can fulfil (and deliver) those requests. The
 platform runs on a closed credit economy — credits cannot be bought,
@@ -12,12 +12,15 @@ withdrawn, or exchanged for money, and circulate only within the platform.
 
 ## Team Members
 
-| Name | Role |
-| ----- | ----- |
-| Malcolm Chu  | Order service |
-| Gabriel Kua | User service |
-| Nathan Tay | Credit service |
-| Kea Harvan | Supplier service |
+| Name | Core service | Nice-to-have |
+| ----- | ----- | ----- |
+| Malcolm Chu | Order service | Testing, reliability and observability |
+| Gabriel Kua | User service | Cloud deployment and CI/CD |
+| Nathan Tay | Credit service | Admin dashboard |
+| Kea Harvan | Supplier service | RAG FAQ assistant (`faq-service/`) |
+
+Each member owns one core microservice end to end (database, API, events, tests) plus one
+nice-to-have. The React frontend, the nginx gateway and the shared packages were built together.
 
 ---
 
@@ -29,11 +32,23 @@ microservice (`user-service/`, `supplier-service/`, `order-service/`,
 
 ```text
 .
-├── user-service/
-├── supplier-service/
-├── order-service/
-├── credit-service/
-├── faq-service/        (N2H: customer relations, F28)
+├── user-service/          sign-up, profiles, RBAC (Keycloak)
+├── supplier-service/      stores and facilities on campus
+├── order-service/         errands, from request to delivery
+├── credit-service/        wallets and the credit ledger
+├── faq-service/           N2H: RAG FAQ assistant (F28)
+├── frontend/              React web app
+├── gateway/               nginx: the single public entry, routes /v1/* to the services
+├── packages/
+│   ├── shared-middleware/ token checks, RBAC, error format
+│   └── shared-events/     RabbitMQ event contracts and outbox publisher
+├── infra/
+│   ├── keycloak/          realm config and login theme
+│   └── terraform/         AWS environment (see infra/terraform/README.md)
+├── .github/workflows/     pr.yml (CI) and main.yml (CD)
+├── ai/                    per-member AI usage logs
+├── data/                  seed data (supplier CSVs, location images)
+├── compose.yaml           the whole stack for local development
 └── README.md
 ```
 
@@ -105,6 +120,45 @@ npm test
 curl -X POST http://localhost:8080/realms/campuserrand/protocol/openid-connect/token \
   -d grant_type=password -d client_id=campuserrand-test -d username=<user> -d password=<pass>
 ```
+
+---
+
+## Cloud deployment and CI/CD (N2H)
+
+The app runs on AWS in `ap-southeast-1`: **https://d3ttissyqdza7u.cloudfront.net**
+
+**Architecture.**
+- **Request path:** CloudFront → Application Load Balancer → the nginx gateway.
+- **Services:** run on ECS Fargate in private subnets, with RabbitMQ as a container on the same cluster.
+- **Data:** one RDS Postgres instance holds a database per service.
+- **Secrets:** stored in SSM Parameter Store, never in the repo or the images.
+
+**Infrastructure as code.** Everything is defined in Terraform. `infra/terraform/bootstrap/` creates the state
+bucket, and `infra/terraform/demo/` creates the rest: network, ECR, ECS, RDS, CloudFront, IAM and monitoring.
+Nothing is created by hand in the console.
+
+**CI on every pull request (`pr.yml`).**
+- **Tests:** only the services a PR changes are typechecked, tested, built as Docker images and scanned with
+  Trivy (fixable critical CVEs fail the build).
+- **Other checks:** a gateway routing test, and `terraform validate` when Terraform files change.
+- **Gate:** one `ci-ok` check must pass before a PR can merge into `main`.
+
+**CD on merge to main (`main.yml`).**
+- **Build:** changed images are built once, tagged with the commit SHA and pushed to ECR.
+- **Deploy:** ECS rolls them out by digest. The ECS circuit breaker rolls back a deploy that never becomes
+  healthy, and a smoke test checks the public URL afterwards.
+- **Access:** GitHub signs in to AWS through OIDC, so no AWS keys are stored in GitHub.
+- **Freeze:** setting the `DEPLOY_FREEZE` repo variable to `true` makes every deploy wait for a reviewer's
+  approval. It is used around demos.
+
+**Monitoring.** CloudWatch alarms email the team on ECS deployment problems, dead-lettered messages and outbox
+lag. The `foc` dashboard shows the service metrics.
+
+**Cost.** About US$100 a month while running. Fargate Spot is used for stateless services, RabbitMQ runs as a
+container instead of Amazon MQ, and a small NAT instance replaces a NAT Gateway. The environment is torn down
+on 2026-12-10.
+
+Setup, deploy commands, team access and troubleshooting: `infra/terraform/README.md`.
 
 ---
 
