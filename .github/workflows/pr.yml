@@ -21,6 +21,7 @@ jobs:
       pull-requests: read # paths-filter lists the PR's changed files through the API
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      terraform: ${{ steps.filter.outputs.terraform }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: filter
@@ -46,6 +47,8 @@ jobs:
             gateway: [*shared, 'gateway/**']
             faq-service: [*shared, *workspace, 'faq-service/**']
             keycloak: [*shared, 'infra/keycloak/**']
+            # Not an image (main.yml has no such filter): only the terraform job below uses it.
+            terraform: ['.github/workflows/**', 'infra/terraform/**']
       - id: matrix
         env:
           CHANGES: ${{ steps.filter.outputs.changes }}
@@ -146,16 +149,11 @@ jobs:
         id: build
         run: docker build -t foc-ci/${{ matrix.image }} -f ${{ matrix.dockerfile }} ${{ matrix.context }}
 
-      # nginx -t resolves every upstream name, so map them to localhost for the syntax check.
-      - name: Check nginx config
+      # Starts the built gateway with stub upstreams and checks each public path reaches the right service
+      # and internal paths stay blocked. Also catches a config nginx cannot load (it would not start).
+      - name: Gateway routing test
         if: matrix.kind == 'gateway'
-        run: >
-          docker run --rm
-          --add-host user-service:127.0.0.1 --add-host supplier-service:127.0.0.1
-          --add-host credit-service:127.0.0.1 --add-host order-service:127.0.0.1
-          --add-host faq-service:127.0.0.1
-          --add-host frontend:127.0.0.1
-          foc-ci/gateway nginx -t
+        run: bash gateway/test/routes.sh foc-ci/gateway
 
       # Fails only on CRITICAL vulnerabilities that have a fix (cicd-plan.txt section 5).
       - name: Trivy (fail on fixable CRITICAL)
@@ -183,9 +181,25 @@ jobs:
         if: failure() && matrix.deps != ''
         run: docker compose logs --no-color ${{ matrix.deps }}
 
+  # Syntax and type errors in the Terraform code (e.g. passing a subnet object where an id is needed),
+  # before anyone runs plan. No AWS access and no state: init -backend=false, providers from the lock file.
+  terraform:
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TERRAFORM_IMAGE: hashicorp/terraform:1.16.6@sha256:bfffc1ded5fbf0a17beaaf22eb4793980abdb19d0761ff6a3a0efb2ab4d9b316
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: terraform init + validate (demo/)
+        run: |
+          tf() { docker run --rm -v "$PWD/infra/terraform:/tf" -w /tf/demo "$TERRAFORM_IMAGE" "$@"; }
+          tf init -backend=false -input=false -no-color
+          tf validate -no-color
+
   # The only required status check. Skipped jobs count as passed, so docs-only PRs stay green.
   ci-ok:
-    needs: [changes, test]
+    needs: [changes, test, terraform]
     if: always()
     runs-on: ubuntu-latest
     steps:
