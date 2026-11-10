@@ -154,7 +154,7 @@ jobs:
         env:
           PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
         # Same contexts and arguments as pr.yml and scripts/push-images.ps1. One plain image per tag
-        # (no provenance/SBOM entries, which would count against the ECR keep-5 rule).
+        # (no provenance/SBOM entries, which would count against the ECR keep-10 rule).
         run: |
           case "$IMAGE" in
             gateway)  args=(-f gateway/Dockerfile gateway) ;;
@@ -202,6 +202,26 @@ jobs:
         with:
           role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+
+      # The revision running before this deploy = the target for a manual rollback (the circuit breaker
+      # only covers tasks that never get healthy). Written to the run's Summary page.
+      - name: Record the revision running now
+        run: |
+          current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$IMAGE" \
+                    --query 'services[0].taskDefinition' --output text || true)
+          if [ -z "$current" ] || [ "$current" = None ]; then
+            echo "No running revision of $IMAGE to record."
+            exit 0
+          fi
+          image=$(aws ecs describe-task-definition --task-definition "$current" \
+                  --query 'taskDefinition.containerDefinitions[0].image' --output text || echo unknown)
+          echo "Before this deploy: $current ($image)"
+          {
+            echo "### $IMAGE: last known good (before this deploy)"
+            echo "- Revision: \`$current\`"
+            echo "- Image: \`$image\`"
+            echo "- Roll back: \`aws ecs update-service --cluster $CLUSTER --service $IMAGE --task-definition $current --profile nus\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Terraform owns the task definition; CI only swaps the image (aws-infra-plan.txt TASK DEFINITION
       # OWNERSHIP). Take the family's LATEST revision so env changes from a terraform apply are kept.

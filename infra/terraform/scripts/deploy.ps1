@@ -19,7 +19,7 @@ param(
 
 $env:AWS_PROFILE = 'nus'
 $cluster = 'foc'
-$appServices = @('user-service', 'supplier-service', 'credit-service', 'order-service', 'frontend', 'gateway', 'keycloak')
+$appServices = @('user-service', 'supplier-service', 'credit-service', 'order-service', 'faq-service', 'frontend', 'gateway', 'keycloak')
 
 if (-not $Tag) { $Tag = (git -C $PSScriptRoot rev-parse HEAD).Trim() }
 if ($Services -contains 'all') { $Services = $appServices }
@@ -42,6 +42,12 @@ foreach ($svc in $Services) {
 foreach ($svc in $Services) {
   $image = "$registry/foc/$svc@$($digests[$svc])"
   Write-Host "== $svc -> $image"
+
+  # The revision running now = the target for a manual rollback if the new version is healthy but wrong.
+  $current = aws ecs describe-services --cluster $cluster --services $svc --query 'services[0].taskDefinition' --output text
+  if ($LASTEXITCODE -ne 0 -or -not $current) { throw "Could not read the running revision of $svc" }
+  Write-Host "   running now: $current"
+  Write-Host "   roll back:   aws ecs update-service --cluster $cluster --service $svc --task-definition $current --profile nus"
 
   # Latest revision of the family, minus the read-only fields register-task-definition rejects.
   $json = aws ecs describe-task-definition --task-definition "foc-$svc" --query taskDefinition --output json |

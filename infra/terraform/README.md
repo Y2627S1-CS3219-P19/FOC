@@ -72,6 +72,13 @@ rolls back and the script says so. Do not touch `initial_image_tag` for this.
 To make a Terraform env/secret change reach a running service: apply, then redeploy that service
 (Run workflow with services `<svc>`, or `deploy.ps1 -Services <svc> -Tag <running sha>`).
 
+**Rollback.** The circuit breaker only rolls back tasks that never get healthy. If a new version is
+healthy but wrong, go back by hand: main.yml's run Summary (and `deploy.ps1`'s output) shows each
+service's revision from before the deploy, with the `aws ecs update-service ... --task-definition
+<that revision>` command to run. That brings back the old image and the old task definition's env
+and secret names; secret values are read from SSM at start, so they stay current. ECR keeps the last
+10 images per repo, so only recent builds can be rolled back to. Then fix forward with a normal PR.
+
 ## Team access (read-only)
 
 IAM users are blocked by the NUS organisation, so teammates use their OWN NUS sandbox account and
