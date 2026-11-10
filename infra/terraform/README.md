@@ -50,6 +50,12 @@ ECS cannot start a service without an image, and ECR starts empty. So:
    services. Without it, a plain `terraform apply` plans to delete all of them. Never change
    `initial_image_tag` again: CI owns the image from now on.
 
+## Checks on pull requests
+
+pr.yml runs `terraform init -backend=false` + `terraform validate` on `demo/` for any PR that
+touches `infra/terraform/**` (no AWS access, no state). It catches syntax and type errors; it is
+not a plan, so `terraform plan` before every apply is still needed.
+
 ## Deploying a new commit
 
 Automatic: merging to `main` runs `.github/workflows/main.yml`, which builds, scans, pushes and
