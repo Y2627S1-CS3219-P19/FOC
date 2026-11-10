@@ -1,9 +1,9 @@
 <#
-Builds the 7 images from the CURRENT commit on this laptop and pushes them to ECR, tagged with the
+Builds the 8 images from the CURRENT commit on this laptop and pushes them to ECR, tagged with the
 full git SHA. Stand-in for the first main.yml run (implementation-plan.txt 9.5) so the demo can go up
 before main.yml exists. Use it on an up-to-date, clean main that passed pr.yml.
 
-    .\infra\terraform\scripts\push-images.ps1                  # all 7
+    .\infra\terraform\scripts\push-images.ps1                  # all 8
     .\infra\terraform\scripts\push-images.ps1 -Only frontend   # just some
 
 Images already in ECR under this SHA are skipped (tags are immutable).
@@ -49,6 +49,7 @@ try {
     'supplier-service' = @('-f', 'supplier-service/Dockerfile', '.')
     'credit-service'   = @('-f', 'credit-service/Dockerfile', '.')
     'order-service'    = @('-f', 'order-service/Dockerfile', '.')
+    'faq-service'      = @('-f', 'faq-service/Dockerfile', '.')
     # Vite bakes this into the JS. No VITE_MAILPIT_URL, so the dev Mailpit hint stays hidden.
     'frontend'         = @('-f', 'frontend/Dockerfile', '--build-arg', "VITE_KEYCLOAK_URL=$publicUrl/auth", '.')
     'gateway'          = @('gateway')
@@ -64,7 +65,7 @@ try {
 
     Write-Host "build  $ref"
     # --provenance/--sbom=false: one plain image per tag. With attestations, each push is 3 entries in
-    # ECR and the keep-5 lifecycle rule could expire parts of an image that is still in use.
+    # ECR and the keep-10 lifecycle rule could expire parts of an image that is still in use.
     docker build --platform linux/amd64 --provenance=false --sbom=false -t $ref $builds[$name]
     if ($LASTEXITCODE -ne 0) { throw "docker build failed: $name" }
     docker push $ref
